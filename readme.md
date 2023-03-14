@@ -22,20 +22,20 @@ Pre-requisites
 Building cellBP:
 =====================
 
-1. Create Makefile.local_defs in ./topoCell/cellBP/
+1. Create Makefile.local_defs in `./topoCell/cellBP/`
 
-The included Makefile reads a file called Makefile.local_defs, which contains 
+The included Makefile reads a file called `Makefile.local_defs`, which contains 
 platform-specific definitions.  You must create this file!  
-Makefile.example_defs includes suggested settings for Linux and OS/X.
+`Makefile.example_defs` includes suggested settings for Linux and OS/X.
 
 If you want to use the command-line interface, define NO_GUI in your build 
-(e.g. in Makefile.local_defs).  If you want to use the GUI, be sure to link 
+(e.g. in `Makefile.local_defs`).  If you want to use the GUI, be sure to link 
 against OpenGL and GLUT.  
 
 2. Generate dependencies and compile
 
-Building the executable is done by running "make depend" followed by 
-"make release" or "make debug".  This should also automatically build the
+Building the executable is done by running "`make depend`" followed by 
+"`make release`" or "`make debug`".  This should also automatically build the
 El Topo library.
 
 Example:
@@ -44,7 +44,7 @@ $> make depend
 $> make release
 ```
 
-This will create the cellBP_release executable which can be used with input scripts to run the whole cell model.
+This will create the `cellBP_release` executable which can be used with input scripts to run the whole cell model.
 
 Using cellBP:
 =====================
@@ -55,8 +55,9 @@ geometry
 2. A path specifying where output files will be written
 
 Example with cell and substrate example input scripts:
+```
 $> ./cellBP_release scripts/cell_example.txt scripts/subs_example.txt
-
+```
 If you are running the GUI, this should pop up a GLUT window with a view of the 
 triangle mesh surface (see main.cpp to learn what the keyboard does).  If you 
 are running with no GUI, it will immediately start running the simulation 
@@ -65,17 +66,17 @@ defined by the script, outputting one binary mesh file per frame in /var/tmp/.
 Post-processing:
 =====================
 
-For the example runs, simulation frames (.vtk files) will be saved in the ./wholeCellFE/cellBP/cell_subs_example/ 
+For the example runs, simulation frames (.vtk files) will be saved in `./wholeCellFE/cellBP/cell_subs_example/` 
 
-Save locations can be changed in the cell and substrate input scripts by changing relative_output_path 
+Save locations can be changed in the cell and substrate input scripts by changing `relative_output_path`.
 
-Simulation frames can be read by paraview
+Simulation frames (.vtk files) can be read by Paraview for visualization, data exportation, and plotting.
 
 Updating integrin stiffness run:
 =====================
-The three integrin stiffness settings (baseline, 31 pN/nm, MD-driven) require separate main.cpp and UL_growth_explicit.cpp files. In ./wholeCellFE/backup_main there are .cpp files for each simulation setting which would have to replace the main.cpp and UL_growth_explicit.cpp files in ./wholeCellFE/cellBP/. The .cpp files used must be named main.cpp and UL_growth_explicit.cpp.
+The three integrin stiffness settings (baseline, 31 pN/nm, MD-driven) require separate `main.cpp` and `UL_growth_explicit.cpp` files. In `./wholeCellFE/backup_main` there are .cpp files for each simulation setting which would have to replace the `main.cpp` and `UL_growth_explicit.cpp` files in `./wholeCellFE/cellBP/`. The .cpp files used must be named `main.cpp` and `UL_growth_explicit.cpp`.
 
-Alternatively, for constant integrin stiffness values only, the variable, "kint", can be updated in pN/um within UL_growth_explicit.cpp.
+Alternatively, for constant integrin stiffness values only, the variable, "`kint`", can be updated in pN/um within `UL_growth_explicit.cpp`.
 
 Code base:
 =====================
