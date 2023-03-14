@@ -15,9 +15,9 @@ Note: This is research-grade code -- full of hacks, bugs, dead code, etc.
 
 Pre-requisites
 =====================
-C compiler (gcc 8.3.0 suggested)
-OpenBLAS
-Netlib-lapack
+- C compiler (gcc 8.3.0 suggested)
+- OpenBLAS
+- Netlib-lapack
 
 Building cellBP:
 =====================
@@ -39,8 +39,10 @@ Building the executable is done by running "make depend" followed by
 El Topo library.
 
 Example:
+```
 $> make depend
 $> make release
+```
 
 This will create the cellBP_release executable which can be used with input scripts to run the whole cell model.
 
