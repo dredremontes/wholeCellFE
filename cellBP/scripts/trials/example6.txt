@@ -1,0 +1,43 @@
+
+relative_output_path example6
+
+frame_dt 0.05
+sim_dt 0.003
+end_sim_t 5.0
+
+invagination_simulation
+(
+   speed 0.0109
+)
+
+surftrack_parameters
+(
+   use_fraction 1
+   min_edge_length 0.01
+   max_edge_length 1.5
+   min_triangle_angle 10
+   max_triangle_angle 130
+   max_volume_change 1.5
+   friction_coefficient 0.0
+   perform_improvement 1
+   allow_non_manifold 0
+   allow_topology_changes 1
+   allow_vertex_movement 1
+   collision_safety 1
+   subdivision_scheme butterfly
+)
+
+ecomsolfile
+(
+   filepath scripts/flat_sq_normal.txt
+)
+
+camera
+(
+   target [0.0 0.0 0.0]
+   distance 1.5
+   heading 0.0
+   pitch 0.0   
+)
+
+
