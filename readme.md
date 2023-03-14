@@ -1,11 +1,13 @@
 
-wholeCellFE - cellBP
+Whole-Cell FE Model for Multiscale Integrin Mechanosensing
 ===============================================================================
 
-Please see ../eltopo3d/readme.txt for information on building the El Topo 
+This code simulates a 2D cell on a flat substrate with adhesion molecules modeled as springs between the two surfaces. Springs can be set as linear (constant spring stiffness) or nonlinear (variable spring stiffness with respect to extension).
+
+Please see `../eltopo3d/readme.txt` for information on building the El Topo 
 library.
 
-This is an application based on El Topo library to simulate invagination.  This readme describes:
+This is an application based on El Topo library. This readme describes:
 
 - how to build the executable
 - how to run the executable
