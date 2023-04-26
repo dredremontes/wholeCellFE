@@ -665,6 +665,14 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 	//double mu = 1.0e1; // [mili-Pa] material parameter
 	double thetag_dot = 0.0; //0.0009; //0.005; // growth rate area_change/time_units, 0.01 is growth of 1% per second
 
+	// these values are taken for chondrocytes on a rigid substrate: Dowling et al. Acta Biomaterialia. 2013.
+	double C = 1; // dimensionless activation signal - rigid substrate assumption indicates that stress fibers are constantly activated
+	double kf = 10; // [1/s] reaction rate of formation
+	double kb = 1; // [1/s] reaction rate of breaking
+	double kv = 7; // dimensionless reduction in fiber stress upon increasing the shortening rate relative to eps_dot_0
+	double theta = 70; // [s] decay constant
+	double eps_dot_0 = 0.003; // [1/s] reference strain rate
+
 	// example 1, biaxial test with no growth
 	//double mu = 75000.0; // Pa, from a value we are using for skin 
 	
