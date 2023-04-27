@@ -1,3 +1,5 @@
+#define _USE_MATH_DEFINES
+
 #include "vec.h"
 #include "nondestructivetrimesh.h"
 #include <vector>
@@ -665,6 +667,15 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 	//double mu = 1.0e1; // [mili-Pa] material parameter
 	double thetag_dot = 0.0; //0.0009; //0.005; // growth rate area_change/time_units, 0.01 is growth of 1% per second
 
+	// these values are taken for chondrocytes on a rigid substrate: Dowling et al. Acta Biomaterialia. 2013.
+	double C_SF = 1; // dimensionless activation signal - rigid substrate assumption indicates that stress fibers are constantly activated
+	double kf = 10; // [1/s] reaction rate of formation
+	double kb = 1; // [1/s] reaction rate of breaking
+	double kv = 7; // dimensionless reduction in fiber stress upon increasing the shortening rate relative to eps_dot_0
+	double theta_SF = 70; // [s] decay constant
+	double eps_dot_0 = 0.003; // [1/s] reference strain rate
+	double T_max = 850; // [Pa] maximum contraction
+
 	// example 1, biaxial test with no growth
 	//double mu = 75000.0; // Pa, from a value we are using for skin 
 	
@@ -774,33 +785,6 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 	
 	// STRESS refered to the 'current' configuration t, in my notes this is 'Sstar'
 	Eigen::Matrix3d Spas = ((mu/theta_g)*be_t_s + theta_g*p*Cinv_s);
-	// STRESS from myosin, i.e. active stress
-	// isotropic for now 
-	double t_act = 0; 
-	if(mat==1){
-		 if(time<2){
-		 	t_act = time*100.0; // Pa = pN/um^2 should be around 100-200 Pa on substrates < 100 kPa per: https://pubs.acs.org/doi/pdf/10.1021/am504135b 
-		// }else if(time<5){
-		// 	t_act = 200.0; 
-		// }else if(time<6){
-		// 	t_act = 200.0 + (time-5)*300.0;
-		// }else if(time<10){
-		// 	t_act = 500; 
-		// }else if(time<11.0){
-		// 	t_act = 500 + (time-10)*500;
-		}else{
-		 	t_act = 200;
-		}
-		// if(time<2){
-		// 	t_act = time*200.0/2; // Pa = pN/um^2
-		// }else{
-		// 	t_act = 200;
-		// }
-	}else if(mat==2){
-		t_act = 0;
-	} 
-	Eigen::Matrix3d Sact = t_act*Id; 
-	Eigen::Matrix3d S = Sact + Spas; 
 	//std::cout<<"S_norm "<<S.norm()<<"\n";
 	// UPDATE the strain 
 	// well, the strain doesn't get updated right now, here we get the IP value of the updated
@@ -809,6 +793,65 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 	Eigen::Matrix3d ea_s = 0.5*(Id-be.inverse());
 	Eigen::VectorXd ea_s_vec(6);
 	ea_s_vec<<ea_s(0,0),ea_s(1,1),ea_s(2,2),ea_s(0,1),ea_s(0,2),ea_s(1,2);
+
+	Eigen::Matrix3d eps_dot = (ea_s - ea_t)/dt_real; 	// material strain rate
+	int N_d = 10; 										// number of segments for trapezoidal integration of stress fibers
+	double dN = (M_PI/2 + M_PI/2)/(N_d-1); 				// segment spacing
+	double phi = -M_PI/2; 								// initialization of first stress fiber angle
+	double t_act = 0; 									// this will need to be tracked over the simulation per node - assign to C_c[0]
+	double eta = 0; 									// SF concentration, this will need to be tracked over the simulation - assign to C_c[1]
+	double eta_dot = (1-eta)*C_SF*kf/theta_SF-kb/theta_SF*(eta-t_act/T_max); // rate of change of concentration
+	double S_11 = 0; // 11 component of active fiber stress 
+	double S_12 = 0; // 12 component of active fiber stress
+	double S_22 = 0; // 22 component of active fiber stress
+	Eigen::Matrix3d Sact;
+	Sact.setZero();
+
+	// only update the contractility based on SF for the cell model 
+	if(mat==1){
+		// trapezoidal integration
+		for(int i=0;i<N_d;i++){
+			phi = -M_PI/2 + i*dN;
+			// calculate the strain rate of the stress fibers
+			double eps_dot_SF = eps_dot(0,1)*cos(phi)*cos(phi)+eps_dot(1,1)*sin(phi)*sin(phi)+eps_dot(0,1)*sin(2*phi);
+				// assign the contractility
+				if(eps_dot_SF/eps_dot_0 <= -eta/kv){
+					t_act = 0;
+				}else if(-eta/kv <= eps_dot_SF/eps_dot_0 && eps_dot_SF/eps_dot_0 <= 0){
+					t_act = eta*T_max*(1-kv/eta*eps_dot_SF/eps_dot_0);
+				}else if(eps_dot_SF/eps_dot_0 > 0){
+					t_act = eta*T_max;
+				}	
+			
+			if(i==0){
+				S_11 = t_act*cos(phi)*cos(phi);
+				S_12 = t_act*sin(2*phi);
+				S_22 = t_act*sin(phi)*sin(phi);
+			}else if(i>=1 && i<N_d-1){
+				S_11 = S_11 + 2*t_act*cos(phi)*cos(phi);
+				S_12 = S_12 + 2*t_act*sin(2*phi);
+				S_22 = S_22 + 2*t_act*sin(phi)*sin(phi);
+			}else if(i==N_d-1){
+				S_11 = S_11 + t_act*cos(phi)*cos(phi);
+				S_12 = S_12 + t_act*sin(2*phi);
+				S_22 = S_22 + t_act*sin(phi)*sin(phi);
+			}
+		}
+
+		S_11 = S_11/(2*(N_d-1));
+		S_12 = S_12/(4*(N_d-1));
+		S_22 = S_22/(2*(N_d-1));
+
+		// create Sact matrix based on calculated S_11, S_12, and S_22 stress values
+		Sact << S_11, S_12, 0,
+				S_12, S_22, 0,
+				0,	0,	0;
+	}else if(mat==2){
+		
+		Sact = t_act*Id;
+	}
+
+	Eigen::Matrix3d S = Sact + Spas; 
 
 	// Given the stress fill out the element residual, lets leave the tangent alone
 	Re.setZero();
