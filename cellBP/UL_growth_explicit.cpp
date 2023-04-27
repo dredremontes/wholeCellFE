@@ -19,8 +19,8 @@
 // function declarations
 //void driverVelocities_Explicit(std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t,double dt);
 //void updateForces_Explicit(std::vector<Vec3d> &X_t, std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh);
-void calculateRes(const std::vector<Vec3d> &X_t,const std::vector<Vec3d> &x_t, std::vector<Eigen::VectorXd> &ea_t,const NonDestructiveTriMesh &mesh, double dt_real, Eigen::VectorXd &Res, Eigen::VectorXd &Res_ea, Eigen::VectorXd &MM, int mat, double time);
-void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Vector3d &node3_X, Eigen::Vector3d &node1_x, Eigen::Vector3d &node2_x, Eigen::Vector3d &node3_x, Eigen::VectorXd &node1_ea, Eigen::VectorXd &node2_ea, Eigen::VectorXd &node3_ea, double dt_real, Eigen::VectorXd &Re, Eigen::VectorXd &Re_ea, Eigen::Vector3d &MMe, int mat, double time);
+void calculateRes(const std::vector<Vec3d> &X_t,const std::vector<Vec3d> &x_t, std::vector<Eigen::VectorXd> &ea_t,const NonDestructiveTriMesh &mesh, double dt_real, Eigen::VectorXd &Res, Eigen::VectorXd &Res_ea, Eigen::VectorXd &MM, int mat, double time, std::vector<double> &c_A, std::vector<double> &c_B);
+void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Vector3d &node3_X, Eigen::Vector3d &node1_x, Eigen::Vector3d &node2_x, Eigen::Vector3d &node3_x, Eigen::VectorXd &node1_ea, Eigen::VectorXd &node2_ea, Eigen::VectorXd &node3_ea, double dt_real, Eigen::VectorXd &Re, Eigen::VectorXd &Re_ea, Eigen::Vector3d &MMe, int mat, double time, std::vector<double> &c_A, std::vector<double> &c_B, int node1index, int node2index, int node3index);
 void calculateConstraintForce(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &x_t);
 void calculatePressureForce(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &x_t, const Eigen::VectorXd &MM, const NonDestructiveTriMesh &mesh, double t_tot);
 void calculateBendingRes(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, const NonDestructiveTriMesh &mesh, Eigen::VectorXd &Res_bending);
@@ -344,7 +344,7 @@ void driverVelocities_Biaxial(const std::vector<Vec3d> &X_t, std::vector<Vec3d> 
 }
 
 // This is the default function, doesnt include cell-substrate interactions or anything like that
-void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot){
+void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<double> &c_A, std::vector<double> &c_B){
 
 	// Central difference following Belytshko Page 333 
 
@@ -366,7 +366,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	std::cout<<"number of nodes= "<<n_node<<"\n";
 	//******************************************************//
 	int mat = 1; // cell
-	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM,mat,t_tot); 
+	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM,mat,t_tot,c_A,c_B); 
 	//******************************************************//
 
 	// Calculate the force constraint, forces needed to enforce things like:
@@ -419,7 +419,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 }
 
 // This function includes the vector of focal adhesion attachements to model cell-subs interaction
-void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<Vec3d> &fa_u, const std::vector<double> &c_C, const std::vector<Vec3d> &x_cell, const NonDestructiveTriMesh &mesh_cell){
+void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<Vec3d> &fa_u, std::vector<double> &c_A, std::vector<double> &c_B, const std::vector<double> &c_C, const std::vector<Vec3d> &x_cell, const NonDestructiveTriMesh &mesh_cell){
 
 	// Central difference following Belytshko Page 333 
 
@@ -442,13 +442,13 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 
 	//******************************************************//
 	int mat = 2; // for substrate 
-	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM,mat,t_tot); 
+	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM,mat,t_tot,c_A,c_B); 
 	//******************************************************//
 
 	// Calculate the force from the cells on the substrate
 	Eigen::VectorXd F_FA(n_node*3);F_FA.setZero();
 	double kint;
-	kint = 31426.8556; // 1000 pN/um = 1 pN/nm
+	kint = 1000; // 1000 pN/um = 1 pN/nm
 
 	calculateForce_FA_subs(F_FA,X_t,x_t,mesh,c_C,x_cell,fa_u,mesh_cell,kint);
 
@@ -515,7 +515,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	// This residual includes both passive and active stresses 
 	//******************************************************//
 	int mat = 1; // for cell
-	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM, mat, t_tot); 
+	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM, mat, t_tot, c_A, c_B); 
 	//******************************************************//
 
 	// Calculate the force constraint, forces needed to enforce things like:
@@ -531,7 +531,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	// Update focal adhesion concentration
 	std::cout<<"going to eval constraint from FA\n";
 	double kint;
-	kint = 31426.8556; // 1000 pN/um = 1 pN/nm
+	kint = 1000; // 1000 pN/um = 1 pN/nm
 
 	calculateForce_FA(F_FA,X_t,x_t,c_C,fa_u,mesh,kint);
 	updateFA(c_C, fa_u, dt_real,X_t,x_t,kint);
@@ -603,7 +603,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 
 }
 
-void calculateRes(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Eigen::VectorXd> &ea_t,const NonDestructiveTriMesh &mesh, double dt_real, Eigen::VectorXd &Res, Eigen::VectorXd &Res_ea, Eigen::VectorXd &MM, int mat, double time){
+void calculateRes(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Eigen::VectorXd> &ea_t,const NonDestructiveTriMesh &mesh, double dt_real, Eigen::VectorXd &Res, Eigen::VectorXd &Res_ea, Eigen::VectorXd &MM, int mat, double time, std::vector<double> &c_A, std::vector<double> &c_B){
 	Res.setZero();
 	Res_ea.setZero();
 	MM.setZero();
@@ -643,7 +643,7 @@ void calculateRes(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, 
 				
         // subroutine to evaluate the element
         //std::cout<<"evaluating element "<<ei<<"\n";
-        evalElementRe(node1_X,node2_X,node3_X,node1_x,node2_x,node3_x,node1_ea,node2_ea,node3_ea, dt_real, Re, Re_ea, MMe, mat, time);
+        evalElementRe(node1_X,node2_X,node3_X,node1_x,node2_x,node3_x,node1_ea,node2_ea,node3_ea, dt_real, Re, Re_ea, MMe, mat, time, c_A, c_B, node1index, node2index, node3index);
         //std::cout<<"element residual norm "<<Re.norm()<<"\n";
         // LOOP OVER NODES
 		for(int nodei=0;nodei<3;nodei++){
@@ -661,7 +661,7 @@ void calculateRes(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, 
 }
 
 
-void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Vector3d &node3_X, Eigen::Vector3d &node1_x, Eigen::Vector3d &node2_x, Eigen::Vector3d &node3_x, Eigen::VectorXd &node1_ea, Eigen::VectorXd &node2_ea, Eigen::VectorXd &node3_ea, double dt_real, Eigen::VectorXd &Re, Eigen::VectorXd &Re_ea, Eigen::Vector3d &MMe, int mat, double time){
+void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Vector3d &node3_X, Eigen::Vector3d &node1_x, Eigen::Vector3d &node2_x, Eigen::Vector3d &node3_x, Eigen::VectorXd &node1_ea, Eigen::VectorXd &node2_ea, Eigen::VectorXd &node3_ea, double dt_real, Eigen::VectorXd &Re, Eigen::VectorXd &Re_ea, Eigen::Vector3d &MMe, int mat, double time,  std::vector<double> &c_A, std::vector<double> &c_B, int node1index, int node2index, int node3index){
 
 	// constants and parameters
 	//double mu = 1.0e1; // [mili-Pa] material parameter
@@ -796,16 +796,24 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 
 	Eigen::Matrix3d eps_dot = (ea_s - ea_t)/dt_real; 	// material strain rate
 	int N_d = 10; 										// number of segments for trapezoidal integration of stress fibers
-	double dN = (M_PI/2 + M_PI/2)/(N_d-1); 				// segment spacing
+	double dN = M_PI/(N_d-1); 							// segment spacing
 	double phi = -M_PI/2; 								// initialization of first stress fiber angle
-	double t_act = 0; 									// this will need to be tracked over the simulation per node - assign to C_c[0]
-	double eta = 0; 									// SF concentration, this will need to be tracked over the simulation - assign to C_c[1]
+	double t_act = 1/3*(c_A[node1index]+c_A[node2index]+c_A[node3index]); 	// this will need to be tracked over the simulation per node - assign to c_A[]
+	double eta = 1/3*(c_B[node1index]+c_B[node2index]+c_B[node3index]); 	// SF concentration, this will need to be tracked over the simulation - assign to c_B[]
 	double eta_dot = (1-eta)*C_SF*kf/theta_SF-kb/theta_SF*(eta-t_act/T_max); // rate of change of concentration
 	double S_11 = 0; // 11 component of active fiber stress 
 	double S_12 = 0; // 12 component of active fiber stress
 	double S_22 = 0; // 22 component of active fiber stress
 	Eigen::Matrix3d Sact;
 	Sact.setZero();
+
+	// store t_act and eta for each node... there has to be a better way to distribute, maybe similar to FAs?
+	c_A[node1index] = t_act;
+	c_A[node2index] = t_act;
+	c_A[node3index] = t_act;
+	c_B[node1index] = eta;
+	c_B[node2index] = eta;
+	c_B[node3index] = eta;
 
 	// only update the contractility based on SF for the cell model 
 	if(mat==1){
@@ -814,7 +822,7 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 			phi = -M_PI/2 + i*dN;
 			// calculate the strain rate of the stress fibers
 			double eps_dot_SF = eps_dot(0,1)*cos(phi)*cos(phi)+eps_dot(1,1)*sin(phi)*sin(phi)+eps_dot(0,1)*sin(2*phi);
-				// assign the contractility
+				// update contractility
 				if(eps_dot_SF/eps_dot_0 <= -eta/kv){
 					t_act = 0;
 				}else if(-eta/kv <= eps_dot_SF/eps_dot_0 && eps_dot_SF/eps_dot_0 <= 0){
@@ -823,6 +831,7 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 					t_act = eta*T_max;
 				}	
 			
+			// create components of the Sact matrix
 			if(i==0){
 				S_11 = t_act*cos(phi)*cos(phi);
 				S_12 = t_act*sin(2*phi);
@@ -848,8 +857,11 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 				0,	0,	0;
 	}else if(mat==2){
 		
-		Sact = t_act*Id;
+		Sact = 0*Id; // no active stress in the substrate
 	}
+
+	// update concentration
+	eta = eta + dt_real*eta_dot;
 
 	Eigen::Matrix3d S = Sact + Spas; 
 

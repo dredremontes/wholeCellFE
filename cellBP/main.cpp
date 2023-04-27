@@ -74,8 +74,8 @@ void driverVelocities_Uniaxial(const std::vector<Vec3d> &X_t, std::vector<Vec3d>
 void driverVelocities_OffBiaxial(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hfl, std::vector<Vec3d> &A_t,double dt, double t_tot);
 void driverVelocities_Biaxial(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hfl, std::vector<Vec3d> &A_t,double dt, double t_tot);
 void driverVelocities_BulgeTest(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hfl, std::vector<Vec3d> &A_t,double dt, double t_tot);
-void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot);
-void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<Vec3d> &fa_u, const std::vector<double> &c_C, const std::vector<Vec3d> &x_cell, const NonDestructiveTriMesh &mesh_cell);
+void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<double> &c_A, std::vector<double> &c_B);
+void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<Vec3d> &fa_u, std::vector<double> &c_A, std::vector<double> &c_B, const std::vector<double> &c_C, const std::vector<Vec3d> &x_cell, const NonDestructiveTriMesh &mesh_cell);
 void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, 
     std::vector<double> &c_A, std::vector<double> &c_B, std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot);
 
@@ -335,7 +335,7 @@ namespace {
 
             // use the V_t_hlf to get desired positions 
             for(int ni=0;ni<g_surf_subs->get_num_vertices();ni++){
-                new_positions[ni] = g_surf_subs->get_position(ni)+curr_dt*V_t_hlf[ni];
+                new_positions[ni] = g_surf_subs->get_position(ni)+0*curr_dt*V_t_hlf[ni]; // rigid substrate model
                 //std::cout<<"half velocity "<<V_t_hlf[ni]<<"\n";
                 //std::cout<<" new["<<ni<<"]="<<new_positions[ni]<<", from old="<<g_surf->get_position(ni)<<"\n";                
             }
@@ -376,7 +376,7 @@ namespace {
 			
 			// comment below for no_subs model
 			
-            updateForces_Explicit(initial_positions, final_positions, g_surf_subs->get_V_t(), V_t_hlf, g_surf_subs->get_A_t(), g_surf_subs->get_ea_t(), ori_dt, actual_dt, g_surf_subs->m_mesh, sim->m_curr_t, g_surf_cell->get_fa_u(),g_surf_cell->get_cC(),g_surf_cell->get_positions(),g_surf_cell->m_mesh);
+            updateForces_Explicit(initial_positions, final_positions, g_surf_subs->get_V_t(), V_t_hlf, g_surf_subs->get_A_t(), g_surf_subs->get_ea_t(), ori_dt, actual_dt, g_surf_subs->m_mesh, sim->m_curr_t, g_surf_cell->get_fa_u(),g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_positions(),g_surf_cell->m_mesh);
             
             //
             // file output
@@ -449,8 +449,8 @@ namespace {
                 char vtk_cell_filename[256];
                 sprintf( vtk_cell_filename, "%s/cell_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );
 				// double kint = -1; // use for MD-driven stiffness
-				double kint = 31426.8556; // use for linear stiffness of 32 pN/nm
-				// double kint = 1000; // use for 1 pN/nm
+				// double kint = 31426.8556; // use for linear stiffness of 32 pN/nm
+				double kint = 1000; // use for 1 pN/nm
                 write_vtk( g_surf_cell->m_mesh, g_surf_cell->get_positions(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_fa_u(), g_surf_cell->get_ea_t(), sim->m_curr_t, vtk_cell_filename , kint);   
                 char vtk_subs_filename[256];
                 sprintf( vtk_subs_filename, "%s/subs_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      
@@ -717,8 +717,8 @@ int main(int argc, char **argv)
     char vtk_filename[256];
     sprintf( vtk_filename, "%s/cell_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      
     // double kint = -1; // use for MD-driven stiffness
-	double kint = 31426.8556; // use for linear stiffness
-	// double kint = 1000; // use for 1 pN/nm
+	// double kint = 31426.8556; // use for linear stiffness
+	double kint = 1000; // use for 1 pN/nm
 	write_vtk( g_surf_cell->m_mesh, g_surf_cell->get_positions(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(), g_surf_cell->get_fa_u(), g_surf_cell->get_ea_t(), sim->m_curr_t, vtk_filename , kint);
     char vtk_filename2[256];
     sprintf( vtk_filename2, "%s/subs_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      

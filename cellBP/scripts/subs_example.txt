@@ -1,9 +1,9 @@
 
 relative_output_path cell_subs_example
 
-frame_dt 0.04
-sim_dt 0.0005
-end_sim_t 1.0
+frame_dt 0.001
+sim_dt 0.00000001
+end_sim_t 0.01
 
 surftrack_parameters
 (
