@@ -81,7 +81,8 @@ void read_ecomsol(NonDestructiveTriMesh &mesh, std::vector<Vec3d> &x, std::vecto
 
 // by Adrian BT on July 2017
 void write_vtk(const NonDestructiveTriMesh &mesh, const std::vector<Vec3d> &x, double current_time, const char* filename);
-void write_vtk(const NonDestructiveTriMesh &mesh, const std::vector<Vec3d> &x, const std::vector<double> &c_B, const std::vector<double> &c_C, const std::vector<double> &c_BC, const std::vector<Vec3d> &fa_u, const std::vector<Eigen::VectorXd> &ea_t, double current_time, const char* filename, double kint);
+//void write_vtk(const NonDestructiveTriMesh &mesh, const std::vector<Vec3d> &x, const std::vector<double> &c_B, const std::vector<double> &c_C, const std::vector<double> &c_BC, const std::vector<Vec3d> &fa_u, const std::vector<Eigen::VectorXd> &ea_t, double current_time, const char* filename, double kint);
+void write_vtk(const NonDestructiveTriMesh &mesh, const std::vector<Vec3d> &x, const std::vector<double> &c_A, const std::vector<double> &c_B, const std::vector<double> &c_C, const std::vector<Vec3d> &fa_u, const std::vector<Eigen::VectorXd> &ea_t, double current_time, const char* filename, double kint);
 void write_vtk(const NonDestructiveTriMesh &mesh, const std::vector<Vec3d> &x,const std::vector<Eigen::VectorXd> &ea_t, const std::vector<Vec3d> &fa_u, double current_time, const char* filename);
 // ---------------------------------------------------------
 //

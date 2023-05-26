@@ -76,8 +76,12 @@ void driverVelocities_Biaxial(const std::vector<Vec3d> &X_t, std::vector<Vec3d> 
 void driverVelocities_BulgeTest(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hfl, std::vector<Vec3d> &A_t,double dt, double t_tot);
 void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot);
 void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<Vec3d> &fa_u, const std::vector<double> &c_C, const std::vector<Vec3d> &x_cell, const NonDestructiveTriMesh &mesh_cell);
-void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, 
-    std::vector<double> &c_A, std::vector<double> &c_B, std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot);
+void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, std::vector<double> &c_A, std::vector<double> &c_B, std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot);
+
+// updating the focal adhesions Andre's trash update
+void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t,double kint);
+// let's see if this works......
+void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real, const std::vector<Vec3d> &X_t_cell, const std::vector<Vec3d> &x_t_cell,const NonDestructiveTriMesh &mesh_cell, const std::vector<Vec3d> &X_t_subs, const std::vector<Vec3d> &x_t_subs,const NonDestructiveTriMesh &mesh_subs, double kint);
 
 // standalone driver for epibole, january 2019
 void driverVelocities_Zebrafish(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t,double dt, double t_tot);
@@ -168,6 +172,8 @@ namespace {
         // depending on collisions, self-intersections, weird things happening to 
         // the mesh, etc.
         
+        // there are two while loops here, one to update the cell positions and one to update
+        // the substrate 
         double accum_dt = 0;
         while ( (accum_dt < 0.99 * sim_dt) && (sim->m_curr_t + accum_dt < sim->m_max_t) )
         {            
@@ -182,10 +188,8 @@ namespace {
             // ---------- 
             
             // Improve
-            
             g_surf_cell->improve_mesh();
             g_surf_cell->defrag_mesh();
-            
             std::cout<<"total vertices after improvement = "<<g_surf_cell->get_num_vertices()<<"\n";
             std::cout<<"total triangles after improvemen t= "<<g_surf_cell->m_mesh.num_triangles()<<"\n";            
 
@@ -196,7 +200,6 @@ namespace {
             // this is the desired time step for the sub-step, if that makes sense
             double curr_dt = sim_dt - accum_dt; 
             curr_dt = min( curr_dt, sim->m_max_t - sim->m_curr_t - accum_dt );
-            
             std::cout << "curr_dt: " << curr_dt << std::endl;
 
             ////-------------------------------------------------------------////
@@ -215,6 +218,9 @@ namespace {
             //driverVelocities_OffBiaxial(g_surf->get_positions(), g_surf->get_V_t(), V_t_hlf, g_surf->get_A_t(), curr_dt,sim->m_curr_t );
             //driverVelocities_Biaxial(g_surf->get_positions(), g_surf->get_V_t(), V_t_hlf, g_surf->get_A_t(), curr_dt,sim->m_curr_t );
             //driverVelocities_BulgeTest(g_surf->get_positions(), g_surf->get_V_t(), V_t_hlf, g_surf->get_A_t(), curr_dt,sim->m_curr_t );
+            // this explicit driver all it does is fill out the V_t_hlf vector based on the previous velocity and previous acceleration
+            // just V_h = Vt + dt*A_t
+            // the other drivers all they do is add boundary conditions
             driverVelocities_Explicit(g_surf_cell->get_positions(), g_surf_cell->get_V_t(), V_t_hlf, g_surf_cell->get_A_t(), curr_dt);
 
             // use the V_t_hlf to get desired positions 
@@ -251,106 +257,58 @@ namespace {
             //for(int ni=0;ni<final_positions.size();ni++){
             //    std::cout<<" final["<<ni<<"]="<<final_positions[ni]<<", from initial="<<initial_positions[ni]<<"\n";
             //}
-            
-            accum_dt += curr_dt;
-            
-            // with the actual final positions and initial positions recompute the 
-            // residual at the real time step, update the velocities, and also the strains
-            //updateForces_Explicit(initial_positions, final_positions, g_surf->get_V_t(), V_t_hlf, g_surf->get_A_t(), g_surf->get_ea_t(), ori_dt, actual_dt, g_surf->m_mesh, sim->m_curr_t);
-            // update forces including concentrations 
-            updateForces_Explicit(initial_positions, final_positions, g_surf_cell->get_V_t(), V_t_hlf, g_surf_cell->get_A_t(), g_surf_cell->get_ea_t(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_fa_u(), ori_dt, actual_dt, g_surf_cell->m_mesh, sim->m_curr_t);
-            
-            //
-            // file output
-            //
-            
-            //char binary_filename[256];
-            //sprintf( binary_filename, "%s/frame%04d.bin", g_output_path, frame_stepper->get_frame() );      
-            //write_binary_file( g_surf->m_mesh, g_surf->get_positions(), g_surf->m_masses, sim->m_curr_t, binary_filename );   
-
-            //char vtk_filename[256];
-            //sprintf( vtk_filename, "%s/frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      
-            // several options
-            //write_vtk( g_surf->m_mesh, g_surf->get_positions(), sim->m_curr_t, vtk_filename );   
-            //write_vtk( g_surf->m_mesh, g_surf->get_positions(), g_surf->get_cB(),g_surf->get_cC(),g_surf->get_cBC(),sim->m_curr_t, vtk_filename );   
-            //write_vtk( g_surf->m_mesh, g_surf->get_positions(), g_surf->get_ea_t(), sim->m_curr_t, vtk_filename );   
-            
-            //char stats_filename[256];
-            //sprintf( stats_filename, "%s/aaa-stats.txt", g_output_path );      
-            //g_stats.write_to_file( stats_filename );
-            
-        }
-        
-        std::cout << " -------------- end sim step cell -------------- \n" << std::endl;
-
-
-        accum_dt = 0;
-        while ( (accum_dt < 0.99 * sim_dt) && (sim->m_curr_t + accum_dt < sim->m_max_t) )
-        {            
             std::cout << "\n\n ------- sim step substrate ------- \n\n";
-            std::cout << "curr t: " << sim->m_curr_t + accum_dt << " / " << sim->m_max_t << std::endl;
-            
-            std::cout<<"total vertices before improvement = "<<g_surf_subs->get_num_vertices()<<"\n";
-            std::cout<<"total triangles before improvemen t= "<<g_surf_subs->m_mesh.num_triangles()<<"\n";
-            
+            // got to be careful and try to do the same step for cell and substrate
+            // since the integration is done independently, then the best is to do both independently and then redo
+            // the one with the smaller time step if needed 
+
             // ---------- 
             // mesh maintenance & topology changes
             // ---------- 
-            
             // Improve
-            
             g_surf_subs->improve_mesh();
             g_surf_subs->defrag_mesh();
-            
             std::cout<<"total vertices after improvement = "<<g_surf_subs->get_num_vertices()<<"\n";
             std::cout<<"total triangles after improvemen t= "<<g_surf_subs->m_mesh.num_triangles()<<"\n";            
 
             // ---------- 
             // advance underlying simulation
             // ----------
-            
-            // this is the desired time step for the sub-step, if that makes sense
-            double curr_dt = sim_dt - accum_dt; 
-            curr_dt = min( curr_dt, sim->m_max_t - sim->m_curr_t - accum_dt );
-            
-            std::cout << "curr_dt: " << curr_dt << std::endl;
+            // comment out for rigid substrate
 
             ////-------------------------------------------------------------////
             //*************** Explicit time integration ***********************//
             ////-------------------------------------------------------------////
-
-            std::vector<Vec3d> new_positions( g_surf_subs->get_num_vertices() );
+            
+            std::vector<Vec3d> new_positions_subs( g_surf_subs->get_num_vertices() );
             // replace the driver with the explicit time integration with UL growth
             //driver->set_predicted_vertex_positions( *g_surf, new_positions, sim->m_curr_t + accum_dt, curr_dt );
-            std::vector<Vec3d> V_t_hlf(g_surf_subs->get_num_vertices());
+            std::vector<Vec3d> V_t_hlf_subs(g_surf_subs->get_num_vertices());
             //std::cout<<"explicit driver...\n";
-
+            
             // July 13th 2019, off biaxial
             //std::cout<<"explicit driver...\n";
             //driverVelocities_Uniaxial(g_surf->get_positions(), g_surf->get_V_t(), V_t_hlf, g_surf->get_A_t(), curr_dt,sim->m_curr_t );
             //driverVelocities_OffBiaxial(g_surf->get_positions(), g_surf->get_V_t(), V_t_hlf, g_surf->get_A_t(), curr_dt,sim->m_curr_t );
-            driverVelocities_Biaxial(g_surf_subs->get_positions(), g_surf_subs->get_V_t(), V_t_hlf, g_surf_subs->get_A_t(), curr_dt,sim->m_curr_t );
+            driverVelocities_Biaxial(g_surf_subs->get_positions(), g_surf_subs->get_V_t(), V_t_hlf_subs, g_surf_subs->get_A_t(), curr_dt,sim->m_curr_t );
             //driverVelocities_BulgeTest(g_surf->get_positions(), g_surf->get_V_t(), V_t_hlf, g_surf->get_A_t(), curr_dt,sim->m_curr_t );
             //driverVelocities_Explicit(g_surf_subs->get_positions(), g_surf_subs->get_V_t(), V_t_hlf, g_surf_subs->get_A_t(), curr_dt );
 
             // use the V_t_hlf to get desired positions 
             for(int ni=0;ni<g_surf_subs->get_num_vertices();ni++){
-                new_positions[ni] = g_surf_subs->get_position(ni)+curr_dt*V_t_hlf[ni];
+                new_positions_subs[ni] = g_surf_subs->get_position(ni)+0*curr_dt*V_t_hlf_subs[ni];
                 //std::cout<<"half velocity "<<V_t_hlf[ni]<<"\n";
                 //std::cout<<" new["<<ni<<"]="<<new_positions[ni]<<", from old="<<g_surf->get_position(ni)<<"\n";                
             }
             //std::cout<<"done computing new positions based on V_hlf...\n";
             // this is setting the desired positions
-            g_surf_subs->set_all_newpositions( new_positions );
+            g_surf_subs->set_all_newpositions( new_positions_subs );
             std::cout << "sim_dt: " << curr_dt << std::endl;
             
             // ----------
             // move & handle collision detection
             // ----------
-            
-            double actual_dt;
-            std::vector<Vec3d> initial_positions = g_surf_subs->get_positions();
-            
+            std::vector<Vec3d> initial_positions_subs = g_surf_subs->get_positions();
             // here the dynamic surface would like to indeed take the desired time step
             // but maybe it can't, and in that case it will return the actual time
             // step taken.
@@ -358,27 +316,57 @@ namespace {
             g_surf_subs->integrate( curr_dt, actual_dt );
             
             // the time step actually taken by el topo
-            double ori_dt = curr_dt;
+            double ori_dt2 = curr_dt;
             curr_dt = actual_dt;    
-            
             std::cout << "actual_dt: " << actual_dt << std::endl;
+            std::vector<Vec3d> final_positions_subs = g_surf_subs->get_positions();
+
+            // here need to cheack if actual_dt<ori_dt2 it means that substrate needed even smaller
+            // timestep than the cell, therefore need to redo the cell with the smaller time 
+            if(actual_dt<ori_dt2){
+                std::cout<<"because actual_dt<intermediate_dt, need to redo cell update\n";
+                // Redo the cell with the smaller time step, should work because it worked already with bigger dt
+                driverVelocities_Explicit(g_surf_cell->get_positions(), g_surf_cell->get_V_t(), V_t_hlf, g_surf_cell->get_A_t(), curr_dt);
+                // use the V_t_hlf to get desired positions 
+                for(int ni=0;ni<g_surf_cell->get_num_vertices();ni++){
+                    new_positions[ni] = g_surf_cell->get_position(ni)+curr_dt*V_t_hlf[ni];
+                }
+                g_surf_cell->set_all_newpositions( new_positions );
+                g_surf_cell->integrate( curr_dt, actual_dt );
+                if(actual_dt<curr_dt){std::cout<<"something is wrong!!!! even smaller time step in second cell update\n";}
+                double ori_dt3 = curr_dt;
+                curr_dt = actual_dt;                
+                final_positions = g_surf_cell->get_positions();                
+            }
+			
+            std::cout << " -------------- end sim step  -------------- \n" << std::endl;
+
+            std::cout << " ---------- fa and forces update  ---------- \n" << std::endl;
+
+            // at this point, we have advanced both cell and substrate in time, taking the smallest time
+            // step that works for both surfaces 
+            // time to update FA based on the deformed meshes 
             
-            std::vector<Vec3d> final_positions = g_surf_subs->get_positions();
-            //for(int ni=0;ni<final_positions.size();ni++){
-            //    std::cout<<" final["<<ni<<"]="<<final_positions[ni]<<", from initial="<<initial_positions[ni]<<"\n";
-            //}
+			// integrin stiffness update
+			double kint;
+			kint = 1000; // 1000 pN/um = 1 pN/nm... define the integrin stiffness in pN/um 
+            // kint = 31000;
+            // kint = -1; // for MD purposes
+			//updateFA(g_surf_cell->get_cC(), g_surf_cell->get_fa_u(), actual_dt, initial_positions, final_positions, kint);
+            updateFA(g_surf_cell->get_cC(), g_surf_cell->get_fa_u(), actual_dt, initial_positions, final_positions,g_surf_cell->m_mesh, initial_positions_subs, final_positions_subs,g_surf_subs->m_mesh, kint);
+			
+            // with the actual final positions and initial positions recompute the 
+            // residual at the real time step, update the velocities, and also the strains
+            //updateForces_Explicit(initial_positions, final_positions, g_surf->get_V_t(), V_t_hlf, g_surf->get_A_t(), g_surf->get_ea_t(), ori_dt, actual_dt, g_surf->m_mesh, sim->m_curr_t);
+            // update forces including concentrations 
+            updateForces_Explicit(initial_positions, final_positions, g_surf_cell->get_V_t(), V_t_hlf, g_surf_cell->get_A_t(), g_surf_cell->get_ea_t(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_fa_u(), ori_dt, actual_dt, g_surf_cell->m_mesh, sim->m_curr_t);
+            updateForces_Explicit(initial_positions_subs, final_positions_subs, g_surf_subs->get_V_t(), V_t_hlf_subs, g_surf_subs->get_A_t(), g_surf_subs->get_ea_t(), ori_dt, actual_dt, g_surf_subs->m_mesh, sim->m_curr_t, g_surf_cell->get_fa_u(),g_surf_cell->get_cC(),g_surf_cell->get_positions(),g_surf_cell->m_mesh);
+			
             
             accum_dt += curr_dt;
             
-            // with the actual final positions and initial positions recompute the residual
-            // update the velocities, and also the strains
-            // AND also pass the final vector of nodal reference integrin connections from the cell mesh
-			
-			// comment below for no_subs model
-			
-            updateForces_Explicit(initial_positions, final_positions, g_surf_subs->get_V_t(), V_t_hlf, g_surf_subs->get_A_t(), g_surf_subs->get_ea_t(), ori_dt, actual_dt, g_surf_subs->m_mesh, sim->m_curr_t, g_surf_cell->get_fa_u(),g_surf_cell->get_cC(),g_surf_cell->get_positions(),g_surf_cell->m_mesh);
             
-            //
+			//
             // file output
             //
             
@@ -397,14 +385,24 @@ namespace {
             //sprintf( stats_filename, "%s/aaa-stats.txt", g_output_path );      
             //g_stats.write_to_file( stats_filename );
             
+            //char binary_filename[256];
+            //sprintf( binary_filename, "%s/frame%04d.bin", g_output_path, frame_stepper->get_frame() );      
+            //write_binary_file( g_surf->m_mesh, g_surf->get_positions(), g_surf->m_masses, sim->m_curr_t, binary_filename );   
+
+            //char vtk_filename[256];
+            //sprintf( vtk_filename, "%s/frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      
+            // several options
+            //write_vtk( g_surf->m_mesh, g_surf->get_positions(), sim->m_curr_t, vtk_filename );   
+            //write_vtk( g_surf->m_mesh, g_surf->get_positions(), g_surf->get_cB(),g_surf->get_cC(),g_surf->get_cBC(),sim->m_curr_t, vtk_filename );   
+            //write_vtk( g_surf->m_mesh, g_surf->get_positions(), g_surf->get_ea_t(), sim->m_curr_t, vtk_filename );   
+            
+            //char stats_filename[256];
+            //sprintf( stats_filename, "%s/aaa-stats.txt", g_output_path );      
+            //g_stats.write_to_file( stats_filename );
+            
         }
         
-        std::cout << " -------------- end sim step substrate -------------- \n" << std::endl;
-
-        // This function now is just the same as the matlab, takes in concentrations at 
-        // previous time step and gives back new concentrations by reaction-diffusion 
-        //advance_diffusion(g_surf->m_mesh, g_surf->get_positions(), g_surf->get_cB(),g_surf->get_cC(),g_surf->get_cBC(), sim_dt);
-
+        std::cout << " -------------- end force step  -------------- \n" << std::endl;
         
         sim->m_curr_t += accum_dt;
                 
@@ -447,11 +445,12 @@ namespace {
                 advance_sim( dt );
                 // save at the end of the frame
                 char vtk_cell_filename[256];
-                sprintf( vtk_cell_filename, "%s/cell_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );
-				// double kint = -1; // use for MD-driven stiffness
-				// double kint = 31426.8556; // use for linear stiffness of 32 pN/nm
-				double kint = 1000; // use for 1 pN/nm
-                write_vtk( g_surf_cell->m_mesh, g_surf_cell->get_positions(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_fa_u(), g_surf_cell->get_ea_t(), sim->m_curr_t, vtk_cell_filename , kint);   
+                sprintf( vtk_cell_filename, "%s/cell_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      
+                double kint;
+	            kint = 1000; // 1000 pN/um = 1 pN/nm... define the integrin stiffness in pN/um 
+                // kint = 31000;
+                // kint = -1; // for MD purposes   
+                write_vtk( g_surf_cell->m_mesh, g_surf_cell->get_positions(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_fa_u(), g_surf_cell->get_ea_t(), sim->m_curr_t, vtk_cell_filename, kint );   
                 char vtk_subs_filename[256];
                 sprintf( vtk_subs_filename, "%s/subs_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      
                 //write_vtk( g_surf_subs->m_mesh, g_surf_subs->get_positions(), g_surf_subs->get_cA(),g_surf_subs->get_cB(),g_surf_subs->get_cC(),sim->m_curr_t, vtk_subs_filename );   
@@ -712,14 +711,16 @@ int main(int argc, char **argv)
     // write frame 0
     //char binary_filename[256];
     //sprintf( binary_filename, "%s/frame%04d.bin", g_output_path, frame_stepper->get_frame() );      
-    //write_binary_file( g_surf->m_mesh, g_surf->get_positions(), g_surf->m_masses, sim->m_curr_t, binary_filename );   
+    //write_binary_file( g_surf->m_mesh, g_surf->get_positions(), g_surf->m_masses, sim->m_curr_t, binary_filename );
+
+    double kint;
+	kint = 1000; // 1000 pN/um = 1 pN/nm... define the integrin stiffness in pN/um 
+    // kint = 31000;
+    // kint = -1; // for MD purposes   
     
     char vtk_filename[256];
     sprintf( vtk_filename, "%s/cell_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      
-    // double kint = -1; // use for MD-driven stiffness
-	// double kint = 31426.8556; // use for linear stiffness
-	double kint = 1000; // use for 1 pN/nm
-	write_vtk( g_surf_cell->m_mesh, g_surf_cell->get_positions(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(), g_surf_cell->get_fa_u(), g_surf_cell->get_ea_t(), sim->m_curr_t, vtk_filename , kint);
+    write_vtk( g_surf_cell->m_mesh, g_surf_cell->get_positions(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(), g_surf_cell->get_fa_u(), g_surf_cell->get_ea_t(), sim->m_curr_t, vtk_filename, kint );
     char vtk_filename2[256];
     sprintf( vtk_filename2, "%s/subs_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      
     //write_vtk( g_surf_subs->m_mesh, g_surf_subs->get_positions(), g_surf_subs->get_cA(),g_surf_subs->get_cB(),g_surf_subs->get_cC(), sim->m_curr_t, vtk_filename );
