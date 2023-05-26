@@ -25,11 +25,12 @@ void calculateBendingRes(const std::vector<Vec3d> &X_t, const std::vector<Vec3d>
 double calculateBendingEnergy(const std::vector<Eigen::Vector3d> &v_vec_X , const std::vector<Eigen::Vector3d> &v_vec_x,bool print_info);
 void calculateForce_FA(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, const std::vector<double> &c_C, std::vector<Vec3d> &fa_u, const NonDestructiveTriMesh &mesh, double kint);
 void calculateForce_FA_subs(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, const NonDestructiveTriMesh &mesh, const std::vector<double> &c_C, const std::vector<Vec3d> &x_cell, std::vector<Vec3d> &fa_u, const NonDestructiveTriMesh &mesh_cell,double kint);
-void calculateForce_AP(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, const std::vector<double> &c_A, const NonDestructiveTriMesh &mesh);
+void calculateForce_AP(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, const std::vector<double> &c_A, const NonDestructiveTriMesh &mesh, double dt_real);
 void calculateBendingForce2D(Eigen::VectorXd &F_bending, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, const NonDestructiveTriMesh &mesh);
 double calculateAreaTot(const std::vector<Vec3d> &x_t,const NonDestructiveTriMesh &mesh);
 void calculateAreaConstraintForce(Eigen::VectorXd &F_areaConstraint, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, const NonDestructiveTriMesh &mesh, double tot_area);
 void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t,double kint);
+void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real, const std::vector<Vec3d> &X_t_cell, const std::vector<Vec3d> &x_t_cell,const NonDestructiveTriMesh &mesh_cell, const std::vector<Vec3d> &X_t_subs, const std::vector<Vec3d> &x_t_subs,const NonDestructiveTriMesh &mesh_subs, double kint);
 
 // Driver for Zebrafish based on reading from file
 void driverVelocities_Zebrafish(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t,double dt, double t_tot){
@@ -363,16 +364,20 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	std::cout<<"going into calculateRes() \n";
 	std::cout<<"number of nodes= "<<n_node<<"\n";
 	//******************************************************//
-	int mat = 1; // cell
+	// passing 'subs', but this mostly passed because needs to be passed
+	// however, as mentioned at the start of the function, this function was the original one
+	// doesnt do anything in terms of the area constraint, bending energy, FA forces, etc.
+	// but still need to pass which 'material', so default substrate
+	int mat = 2; 
 	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM,mat,t_tot); 
 	//******************************************************//
 
 	// Calculate the force constraint, forces needed to enforce things like:
-	// * growing tissue wants to stick to the sphere
+	// * growing tissue wants to stick to the sphere, or similar forces
 	// Eigen::VectorXd F_constraint(n_node*3);F_constraint.setZero();
 	//calculateConstraintForce(F_constraint,x_t);
 	
-	// Pressure force for the bulge test
+	// Pressure force for the bulge test example
 	//calculatePressureForce(F_constraint,x_t,MM, mesh, t_tot);
 
 	// Calculate bending residual, to prevent buckling, treat as regularization
@@ -405,12 +410,14 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 		//std::cout<<"node "<<ni<<", Res = "<<Res(ni*3+0)<<", "<<Res(ni*3+1)<<", "<<Res(ni*3+2)<<"\n";
 	}
 	
-	
 	// Update the velocities for next time step
 	for(int ni=0;ni<n_node;ni++){
 		if(dt_real>dt/2.0){
+			// this should always be the case in that most of the time dt_real = dt,
+			// we can print is dt_real and dt are not the same... 
 			V_t[ni] = V_t_hlf[ni] + (dt_real - dt/2.0)*A_t[ni];
 		}else{
+			// if dt_real < dt, then this might stil be too large 
 			V_t[ni] = V_t[ni] + dt_real*A_t[ni];
 		}
 	}
@@ -447,7 +454,14 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	Eigen::VectorXd F_FA(n_node*3);F_FA.setZero();
 	double kint;
 	kint = 1000; // 1000 pN/um = 1 pN/nm
-
+	//kint = 31000;
+	// if(t_tot<4){
+	//	kint = 1000; // 1000 pN/um = 1 pN/nm 
+	//}else if(t_tot<8){
+	//	kint = 10000;
+	//}else if(t_tot<12){
+	//	kint = 100000;
+	// }
 	calculateForce_FA_subs(F_FA,X_t,x_t,mesh,c_C,x_cell,fa_u,mesh_cell,kint);
 
 	// net force
@@ -455,7 +469,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	Eigen::VectorXd f_t = F_FA - Res;
 	std::cout<<"net internal force norm on substrate "<<Res.norm()<<"\n";
 	// Update the Acceleration for the next time step, and also the strain
-	double damp = 0.001; // [(kg/s)] not sure this is good or bad? 1 was ok for uniaxial, 0.1 was ok for ZF
+	double damp = 0.001; // [(1/s)] not sure this is good or bad? 1 was ok for uniaxial, 0.1 was ok for ZF
 	//double rho = 1.0; // [ug/um^3] also not sure if this is good or not
 	double rho = 1.0; // [pg/um^3] 
 	// Update acceleration and strain
@@ -474,7 +488,6 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 		//std::cout<<"node "<<ni<<", f_t = "<<f_t(ni*3+0)<<", "<<f_t(ni*3+1)<<", "<<f_t(ni*3+2)<<"\n";
 		//std::cout<<"node "<<ni<<", Res = "<<Res(ni*3+0)<<", "<<Res(ni*3+1)<<", "<<Res(ni*3+2)<<"\n";
 	}
-	
 	
 	// Update the velocities for next time step
 	for(int ni=0;ni<n_node;ni++){
@@ -530,16 +543,16 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	std::cout<<"going to eval constraint from FA\n";
 	double kint;
 	kint = 1000; // 1000 pN/um = 1 pN/nm
+	//kint = 31000;
 
 	calculateForce_FA(F_FA,X_t,x_t,c_C,fa_u,mesh,kint);
-	updateFA(c_C, fa_u, dt_real,X_t,x_t,kint);
 
 	// Also need to add some actin polymerization force 
-	calculateForce_AP(F_AP,X_t,x_t,c_A,mesh);	
+	calculateForce_AP(F_AP,X_t,x_t,c_A,mesh,dt_real);	
 
 	// add some viscous drag for stability 
 	Eigen::VectorXd F_vd(n_node*3);F_vd.setZero();
-	double drag = 0.001; // pN*s/um
+	double drag = 0.001; // pN*s/um 
 	for(int ni=0;ni<x_t.size();ni++){
 		F_vd(ni*3+0) = -drag*(V_t_hlf[ni][0]);
 		F_vd(ni*3+1) = -drag*(V_t_hlf[ni][1]);
@@ -568,7 +581,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	std::cout<<"net internal force norm "<<Res.norm()<<"\n";
 	// Update the Acceleration for the next time step, and also the strain
 	//double damp = 2.0; // [(kg/s)] not sure this is good or bad? 1 was ok for uniaxial, 0.1 was ok for ZF
-	double damp = 0.01; // pN/um*s  
+	double damp = 0.001; // 1/s
 	//double rho = 1.0; // [ug/um^3] also not sure if this is good or not
 	//double rho = 1000.0; // [kg/m^3] 
 	double rho = 1.0; // [pg/um^3] 
@@ -588,7 +601,6 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 		//std::cout<<"node "<<ni<<", f_t = "<<f_t(ni*3+0)<<", "<<f_t(ni*3+1)<<", "<<f_t(ni*3+2)<<"\n";
 		//std::cout<<"node "<<ni<<", Res = "<<Res(ni*3+0)<<", "<<Res(ni*3+1)<<", "<<Res(ni*3+2)<<"\n";
 	}
-	
 	
 	// Update the velocities for next time step
 	for(int ni=0;ni<n_node;ni++){
@@ -668,6 +680,7 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 	// example 1, biaxial test with no growth
 	//double mu = 75000.0; // Pa, from a value we are using for skin 
 	
+	// MATERIAL CHOICE
 	// stiffness 
 	double mu = 0;
 	if(mat==1){
@@ -689,6 +702,30 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 		// 	mu = 1000;
 		// }
 	}
+	// active stress
+	double t_act = 0; 
+	if(mat==1){
+		 if(time<2){
+		 	t_act = time*100.0; // Pa = pN/um^2 should be around 100-200 Pa on substrates < 100 kPa per: https://pubs.acs.org/doi/pdf/10.1021/am504135b 
+		// }else if(time<5){
+		// 	t_act = 200.0; 
+		// }else if(time<6){
+		// 	t_act = 200.0 + (time-5)*300.0;
+		// }else if(time<10){
+		// 	t_act = 500; 
+		// }else if(time<11.0){
+		// 	t_act = 500 + (time-10)*500;
+		}else{
+		 	t_act = 200;
+		}
+		// if(time<2){
+		// 	t_act = time*200.0/2; // Pa = pN/um^2
+		// }else{
+		// 	t_act = 200;
+		// }
+	}else if(mat==2){
+		t_act = 0;
+	} 
 	//double thetag_dot = 0.0; 
 	//double thick = 0.005; // [meters] skin is ~0.5cm thick 
 	double thick = 1; // um  
@@ -776,29 +813,6 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 	Eigen::Matrix3d Spas = ((mu/theta_g)*be_t_s + theta_g*p*Cinv_s);
 	// STRESS from myosin, i.e. active stress
 	// isotropic for now 
-	double t_act = 0; 
-	if(mat==1){
-		 if(time<2){
-		 	t_act = time*100.0; // Pa = pN/um^2 should be around 100-200 Pa on substrates < 100 kPa per: https://pubs.acs.org/doi/pdf/10.1021/am504135b 
-		// }else if(time<5){
-		// 	t_act = 200.0; 
-		// }else if(time<6){
-		// 	t_act = 200.0 + (time-5)*300.0;
-		// }else if(time<10){
-		// 	t_act = 500; 
-		// }else if(time<11.0){
-		// 	t_act = 500 + (time-10)*500;
-		}else{
-		 	t_act = 200;
-		}
-		// if(time<2){
-		// 	t_act = time*200.0/2; // Pa = pN/um^2
-		// }else{
-		// 	t_act = 200;
-		// }
-	}else if(mat==2){
-		t_act = 0;
-	} 
 	Eigen::Matrix3d Sact = t_act*Id; 
 	Eigen::Matrix3d S = Sact + Spas; 
 	//std::cout<<"S_norm "<<S.norm()<<"\n";
@@ -862,7 +876,36 @@ void calculateForce_FA(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &
 	//std::cout<<"hello\n";
 	//double k_FA = 1000; // pN/um
 	double k_FA = kint;
-
+	// FROM ANDRE, piece wise linear fit points
+	int fFA_npts = 5; // for 0.1 nm/ns pull rate
+	// int fFA_npts = 8; // for 2 and 10 nm/ns pull rate
+	
+	// OLD DATA 10 nm/ns pull rate
+	// Eigen::VectorXd pxFA(fFA_npts); pxFA.setZero();
+	// pxFA<< -1.4500e-06,  2.0542e-03,  4.0774e-03,  6.866e-03, 9.7555e-03;
+	// Eigen::VectorXd pyFA(fFA_npts); pyFA.setZero();
+	// pyFA<< 33.71792, 268.264 , 502.6462, 573.2455,503.2933;
+	
+	// 0.1 nm/ns pull rate
+	// Eigen::VectorXd pxFA(fFA_npts); pxFA.setZero();
+	// pxFA<< 0.        , 0.77360187e-03, 2.4288278e-03 , 5.27348466e-03, 6.473125e-03;
+	// Eigen::VectorXd pyFA(fFA_npts); pyFA.setZero();
+	// pyFA<< 6.18578872,  31.20492495, 257.81318168, 113.04735465, 218.57252843;
+	
+	// 2 nm/ns pull rate
+	// Eigen::VectorXd pxFA(fFA_npts); pxFA.setZero();
+	// pxFA<< -0.417375  ,  2.61887113,  6.17608203,  7.04473068, 10.44144885, 13.19262925, 16.69652913, 19.765875;
+	// Eigen::VectorXd pyFA(fFA_npts); pyFA.setZero();
+	// pyFA<< -20.89503266, 345.06755152, 227.63653033, 359.23102306, 197.25583105, 554.05871406, 384.17197124, 234.01261865;
+	
+	// 10 nm/ns pull rate
+	// Eigen::VectorXd pxFA(fFA_npts); pxFA.setZero();
+	// pxFA<< -0.05206917,  3.65738544,  5.08876181,  6.77812596, 11.61124615, 13.92569218, 14.53402364, 19.73099292;
+	// Eigen::VectorXd pyFA(fFA_npts); pyFA.setZero();
+	// pyFA<< 12.62828127, 593.67358827, 614.26466886, 619.23422115, 530.92336541, 545.8471786 , 688.95405979, 648.72872177;
+	
+	//std::cout<<"pxFA\n"<<pxFA;
+	//std::cout<<"pyFA\n"<<pyFA;
 	double rho_i_max = 100; // max integrin density in #/um^2 from "Influence of type I collagen surface density on fibroblast spreading, motility, and contractility.
 	F_constraint.setZero();
 	int n_node = x_t.size();
@@ -885,17 +928,43 @@ void calculateForce_FA(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &
 			double area_ti = 0.5*normal_ti.norm();
 			Asum += area_ti/3; 
 		}
-		// displacement of the integrin attachement in cell
-		Vec3d u_x = x_t[ni]-X_t[ni]+fa_u[ni];
+		// ABT feb 5, 2023
+		// before I was updating the total displacement based on the deformation of the cell
+		// in this timestep, assuming substrate fixed. But now doing this update before calling
+		// this function, so fa should have the correct displacement of integrin 
+		//Vec3d u_x = x_t[ni]-X_t[ni]+fa_u[ni];
+		Vec3d u_x = fa_u[ni];
 		F_constraint(ni*3+0) = -c_C[ni]*k_FA*u_x[0]*Asum*rho_i_max;
 		F_constraint(ni*3+1) = -c_C[ni]*k_FA*u_x[1]*Asum*rho_i_max;
 		F_constraint(ni*3+2) = -c_C[ni]*k_FA*u_x[2]*Asum*rho_i_max;
 		
+		// with Andre data
+		// Eigen::Vector3d Ffa; 
+		// for(int fi=0;fi<fFA_npts-1;fi++){
+			// for(int ci=0;ci<3;ci++){
+				// if(abs(u_x[ci])>=pxFA(fi) && abs(u_x[ci])<pxFA(fi+1)){
+					// double su = (u_x[ci]-pxFA(fi))/(pxFA(fi+1)-pxFA(fi));
+					// if(u_x[ci]>0){
+						// Ffa(ci) = (1-su)*pyFA(fi) + su*pxFA(fi+1);
+					// }else{
+						// Ffa(ci) = -(1-su)*pyFA(fi) - su*pxFA(fi+1);
+					// }
+				// }
+			// }
+		// }
 		//std::cout<<"Ffa\n"<<Ffa;
+		// F_constraint(ni*3+0) = -c_C[ni]*Ffa(0)*Asum*rho_i_max;
+		// F_constraint(ni*3+1) = -c_C[ni]*Ffa(1)*Asum*rho_i_max;
+		// F_constraint(ni*3+2) = -c_C[ni]*Ffa(2)*Asum*rho_i_max;
 
-		// UPDATE the reference position of the substrate, which doesn't move 
+		// ABT feb 5, 2023, commenting out the update of fa vector
+		// before I was updating the fa here from the cell movement, and then update the fa
+		// from substrate movement in a different function, and dissipating energy in even 
+		// one more function. Now trying to put all the fa updates into a single function
+		// so comment out the update here...
+		// update the reference position of the substrate, which doesn't move 
 		// in the update FA I need to dissipate this 
-		fa_u[ni] = u_x;
+		//fa_u[ni] = u_x;
 	}
 }
 
@@ -907,6 +976,7 @@ void calculateForce_FA_subs(Eigen::VectorXd &F_constraint, const std::vector<Vec
 		// get the location of the substrate point, not of the cell, from from cell to fa_u  
 		Vec3d aux = x_cell[ni] - fa_u[ni];
 		Eigen::Vector3d subs_X; subs_X<<aux[0],aux[1],aux[2];
+		Eigen::Vector3d subs_x; subs_x<<aux[0],aux[1],aux[2];
 		// find in which triangle this is, within the substrate mesh 
 		// loop over the triangles of the substrate mesh 
 		int n_elem = mesh.num_triangles();
@@ -920,13 +990,20 @@ void calculateForce_FA_subs(Eigen::VectorXd &F_constraint, const std::vector<Vec
 			Eigen::Vector3d node1_X; node1_X<<X_t[node1index][0],X_t[node1index][1],X_t[node1index][2];
 			Eigen::Vector3d node2_X; node2_X<<X_t[node2index][0],X_t[node2index][1],X_t[node2index][2];
 			Eigen::Vector3d node3_X; node3_X<<X_t[node3index][0],X_t[node3index][1],X_t[node3index][2];
+			// new nodal positions
+			Eigen::Vector3d node1_x; node1_x<<x_t[node1index][0],x_t[node1index][1],x_t[node1index][2];
+			Eigen::Vector3d node2_x; node2_x<<x_t[node2index][0],x_t[node2index][1],x_t[node2index][2];
+			Eigen::Vector3d node3_x; node3_x<<x_t[node3index][0],x_t[node3index][1],x_t[node3index][2];
 			
 			// check if point subs_s was in this triangle by getting barycentric coordinates
-			Eigen::Vector3d edge1 = node2_X - node1_X;
-			Eigen::Vector3d edge2 = node3_X - node1_X;
+			//Eigen::Vector3d edge1 = node2_X - node1_X;
+			//Eigen::Vector3d edge2 = node3_X - node1_X;
+			Eigen::Vector3d edge1 = node2_x - node1_x;
+			Eigen::Vector3d edge2 = node3_x - node1_x;
 			Eigen::Vector3d normal = edge1.cross(edge2);
 			double A_tri = 0.5*normal.norm();
-			Eigen::Vector3d edge_p = subs_X - node1_X; 
+			//Eigen::Vector3d edge_p = subs_X - node1_X; 
+			Eigen::Vector3d edge_p = subs_x - node1_x; 
 			Eigen::Vector3d A3n = edge1.cross(edge_p);
 			double A3=-1;
 			if(A3n(2)>=0){A3 = 0.5*A3n.norm();}
@@ -941,6 +1018,7 @@ void calculateForce_FA_subs(Eigen::VectorXd &F_constraint, const std::vector<Vec
 				// point is in triangle, we can actually see where this point has moved and get force
 				// new x_subs position
 				Vec3d subs_u = (A1/A_tri)*(x_t[node1index]-X_t[node1index])+(A2/A_tri)*(x_t[node2index]-X_t[node2index])+(A3/A_tri)*(x_t[node3index]-X_t[node3index]);
+				// ABT Feb 2023. correct, assume that fa_u has the correct relative displacement between integrin and subs
 				// calculate force with old displacement of the FA to keep the force balance between the two
 				Vec3d u_x = fa_u[ni];
 				// to calculate force we actually need node area 
@@ -1027,15 +1105,18 @@ void calculateForce_FA_subs(Eigen::VectorXd &F_constraint, const std::vector<Vec
 				// F_constraint(node3index*3+0) += c_C[ni]*Ffa(0)*(A3/A_tri)*Asum*rho_i_max;
 				// F_constraint(node3index*3+1) += c_C[ni]*Ffa(1)*(A3/A_tri)*Asum*rho_i_max;
 				// F_constraint(node3index*3+2) += c_C[ni]*Ffa(2)*(A3/A_tri)*Asum*rho_i_max;
+
+				// ABT feb 5, 2023
+				// no more update of fa_u in this function, all updates of fa_u in the update_FA function
 				// UPDATE the reference position wrt cell, which doesn't move in this update
-				u_x = fa_u[ni] - subs_u;
-				fa_u[ni] = u_x;
+				//u_x = fa_u[ni] - subs_u;
+				//fa_u[ni] = u_x;
 			}
 		}
 	}
 }
 
-void calculateForce_AP(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, const std::vector<double> &c_A, const NonDestructiveTriMesh &mesh){
+void calculateForce_AP(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, const std::vector<double> &c_A, const NonDestructiveTriMesh &mesh, double dt_real){
 	// actin polymerization force should be applied on the boundary of the domain, should push outward
 	// in the direction of the normal, with some random fluctuations 
 	// initial random seed
@@ -1102,7 +1183,22 @@ void calculateForce_AP(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &
 			Eigen::Vector3d normal_i = length1/total_length*normal_1 + length2/total_length*normal_2;
 			// add a random force in this direction 
 			//int  factin_scale = (rand() % 500 )*total_length/2.0; // pN 
-			int  factin_scale = (rand() % 20 )*total_length/2.0; // pN 
+			// sample the factin as a poisson process 
+			// https://en.wikipedia.org/wiki/Poisson_point_process
+			double Pr =((double)rand()/((double)RAND_MAX+1.));
+			double  factin_scale = 0;
+			// https://www.pnas.org/doi/10.1073/pnas.0501435102
+			double APrate = 10; // 1/s
+			if(Pr<APrate*dt_real*exp(-APrate*dt_real)){
+				// APdensity*APforce*length, single
+				// single APforce is order 1-10pN, 
+				// https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4810308/pdf/JCB_201512019.pdf
+				// https://www.pnas.org/doi/pdf/10.1073/pnas.0607052104 
+				// concentrations are 1-500uM, so in a thin shell near boundary
+				// on the order of the elongation distance of 1-10nm 
+				// ~5-100 monomers per um 
+			 	factin_scale= 20*total_length/2.0; 
+			}
 			F_constraint(ni*3+0) = factin_scale*normal_i(0);
 			F_constraint(ni*3+1) = factin_scale*normal_i(1);
 			F_constraint(ni*3+2) = factin_scale*normal_i(2);
@@ -1318,46 +1414,6 @@ void calculateAreaConstraintForce(Eigen::VectorXd &F_areaConstraint, const std::
 	}
 }
 
-void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, double kint){
-	// Update focal adhesion concentration 
-	// Bell model of adhesion, no diffusion, point-wise 
-	// October 2022, update to change reference configuration based on disolution of bonds
-	// and creation of new ones  
-	int n_node = c_C.size();
-	for(int ni=0;ni<n_node;ni++){
-		// calculate single integrin force directly from stiffness and displacement 
-		//double k_FA = 1000; // pN/um 
-		double k_FA = kint;
-		double force_FA = k_FA* sqrt(fa_u[ni][0]*fa_u[ni][0] + fa_u[ni][1]*fa_u[ni][1]);
-		// update thinking of some well potential with the force
-		double k_on = 1; // 1/s 
-		double ka = 0.004; // 1/s
-		double kb = 10; // 1/s
-		double Fa = 15; //pN 
-		double Fb = 15; // pN based on Cheng et al. Science Advances. 2021
-		double k_off = ka*exp(force_FA/Fa) + kb*exp(-force_FA/Fb); 
-		//std::cout<<"force per integrin "<<force_FA<<"\n";
-		double c_C_old = c_C[ni];
-		c_C[ni] = c_C[ni] + dt_real*k_on*(1-c_C[ni]) - dt_real*k_off*c_C[ni]; 
-		if(c_C[ni]<0){c_C[ni]=0;}
-
-		// now update the reference state
-		// this is the displacement of the old bonds 
-		// it accumulates from before 
-		//Vec3d u_x = x_t[ni]-X_t[ni]+fa_u[ni];
-		// but as some of these bonds dissapear and new ones are formed
-		// the actual reference should be a weighted sum of the new reference and the old
-		// the new ones have zero displacement, so just need to drift the old ones 
-		//fa_u[ni] = u_x*(c_C_old - dt_real*k_off*c_C_old)/c_C[ni];
-		// Alternatively, just dissipate here 
-		if(c_C_old - dt_real*k_off*c_C_old>0 && c_C[ni]>0){
-			fa_u[ni] = fa_u[ni]*(c_C_old - dt_real*k_off*c_C_old)/c_C[ni];
-		}else{
-			fa_u[ni] = 0.0*fa_u[ni];
-		}
-	}
-}
-
 void calculatePressureForce(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &x_t, const Eigen::VectorXd &MM,const NonDestructiveTriMesh &mesh, double t_tot ){
 	F_constraint.setZero();
 	double pres = 2000.0; // [Pa] 
@@ -1549,3 +1605,154 @@ double calculateBendingEnergy(const std::vector<Eigen::Vector3d> &v_vec_X , cons
 
 	return Energy_b;
 }
+
+//ABT Feb 5, 2023
+// change this function a lot so that it can be called outside of 'calculateForces'
+// because it is too many changes, going to create a new function with different arguments
+// this is called function overloading in C++
+void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, double kint){
+	// Update focal adhesion concentration 
+	// Bell model of adhesion, no diffusion, point-wise 
+	// October 2022, update to change reference configuration based on disolution of bonds
+	// and creation of new ones  
+	int n_node = c_C.size();
+	for(int ni=0;ni<n_node;ni++){
+		// calculate single integrin force directly from stiffness and displacement 
+		//double k_FA = 1000; // pN/um 
+		double k_FA = kint;
+		double force_FA = k_FA* sqrt(fa_u[ni][0]*fa_u[ni][0] + fa_u[ni][1]*fa_u[ni][1]);
+		// update thinking of some well potential with the force
+		double k_on = 1; // 1/s 
+		double ka = 0.004; // 1/s
+		double kb = 10; // 1/s
+		double Fa = 15; //pN 
+		double Fb = 15; // pN based on Schumacher et al. 2021
+		double k_off = ka*exp(force_FA/Fa) + kb*exp(-force_FA/Fb); 
+		//std::cout<<"force per integrin "<<force_FA<<"\n";
+		double c_C_old = c_C[ni];
+		c_C[ni] = c_C[ni] + dt_real*k_on*(1-c_C[ni]) - dt_real*k_off*c_C[ni]; 
+		if(c_C[ni]<0){c_C[ni]=0;}
+
+		// now update the reference state
+		// this is the displacement of the old bonds 
+		// it accumulates from before 
+		//Vec3d u_x = x_t[ni]-X_t[ni]+fa_u[ni];
+		// but as some of these bonds dissapear and new ones are formed
+		// the actual reference should be a weighted sum of the new reference and the old
+		// the new ones have zero displacement, so just need to drift the old ones 
+		//fa_u[ni] = u_x*(c_C_old - dt_real*k_off*c_C_old)/c_C[ni];
+		// Alternatively, just dissipate here 
+		if(c_C_old - dt_real*k_off*c_C_old>0 && c_C[ni]>0){
+			fa_u[ni] = fa_u[ni]*(c_C_old - dt_real*k_off*c_C_old)/c_C[ni];
+		}else{
+			fa_u[ni] = 0.0*fa_u[ni];
+		}
+	}
+}
+
+// ABT feb 5, 2023
+// NEW update FA function that can be called outside of 'calculateForces'
+// function should take previous and new nodal positions of cell and substrate and use to calculate the 
+// new fa and the new c_C
+void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real, const std::vector<Vec3d> &X_t_cell, const std::vector<Vec3d> &x_t_cell,const NonDestructiveTriMesh &mesh_cell, const std::vector<Vec3d> &X_t_subs, const std::vector<Vec3d> &x_t_subs,const NonDestructiveTriMesh &mesh_subs, double kint){
+	// Update focal adhesion concentration 
+	// Bell model of adhesion, no diffusion, point-wise 
+	// October 2022, update to change reference configuration based on disolution of bonds
+	// and creation of new ones  
+	int n_node = c_C.size();
+	for(int ni=0;ni<n_node;ni++){
+		// for every node of the cell, need the displacement from the cell side but also the 
+		// interpolated displacement from the substrate 
+		//
+		// displacement from cell side
+		Vec3d cell_u = x_t_cell[ni]-X_t_cell[ni];
+		// displacement from subs side: need to first find which triangle the X_cell was on, then interpolate subs_u
+		Vec3d subs_u; 
+		// get the location of the substrate point, not of the cell, from from cell to fa_u  
+		Vec3d aux = X_t_cell[ni] - fa_u[ni];
+		Eigen::Vector3d subs_X; subs_X<<aux[0],aux[1],aux[2];
+		//Eigen::Vector3d subs_x; subs_x<<aux[0],aux[1],aux[2];
+		// find in which triangle this is, within the substrate mesh 
+		// loop over the triangles of the substrate mesh 
+		int n_elem = mesh_subs.num_triangles();
+	    for(int ei=0;ei<n_elem;ei++){
+	       	// connectivity of the linear elements
+	        int node1index = mesh_subs.get_triangle(ei)[0];
+	    	int node2index = mesh_subs.get_triangle(ei)[1];
+	    	int node3index = mesh_subs.get_triangle(ei)[2];
+	        
+	        // previous time step nodal positions for this element
+			Eigen::Vector3d node1_X_subs; node1_X_subs<<X_t_subs[node1index][0],X_t_subs[node1index][1],X_t_subs[node1index][2];
+			Eigen::Vector3d node2_X_subs; node2_X_subs<<X_t_subs[node2index][0],X_t_subs[node2index][1],X_t_subs[node2index][2];
+			Eigen::Vector3d node3_X_subs; node3_X_subs<<X_t_subs[node3index][0],X_t_subs[node3index][1],X_t_subs[node3index][2];
+			// new nodal positions
+			Eigen::Vector3d node1_x_subs; node1_x_subs<<x_t_subs[node1index][0],x_t_subs[node1index][1],x_t_subs[node1index][2];
+			Eigen::Vector3d node2_x_subs; node2_x_subs<<x_t_subs[node2index][0],x_t_subs[node2index][1],x_t_subs[node2index][2];
+			Eigen::Vector3d node3_x_subs; node3_x_subs<<x_t_subs[node3index][0],x_t_subs[node3index][1],x_t_subs[node3index][2];
+			
+			// check if point subs_s was in this triangle by getting barycentric coordinates
+			Eigen::Vector3d edge1 = node2_X_subs - node1_X_subs;
+			Eigen::Vector3d edge2 = node3_X_subs - node1_X_subs;
+			//Eigen::Vector3d edge1 = node2_x_subs - node1_x_subs;
+			//Eigen::Vector3d edge2 = node3_x_subs - node1_x_subs;
+			Eigen::Vector3d normal = edge1.cross(edge2);
+			double A_tri = 0.5*normal.norm();
+			Eigen::Vector3d edge_p = subs_X - node1_X_subs; 
+			//Eigen::Vector3d edge_p = subs_x - node1_x_subs; 
+			Eigen::Vector3d A3n = edge1.cross(edge_p);
+			double A3=-1;
+			if(A3n(2)>=0){A3 = 0.5*A3n.norm();}
+			double A2 = -1;
+			Eigen::Vector3d A2n = edge_p.cross(edge2);
+			if(A2n(2)>=0){A2 = 0.5*A2n.norm();}
+			double A1 = A_tri - A2 - A3;
+			if(A1>=0 && A2>=0 && A3>=0){
+				//std::cout<<"point "<<subs_X(0)<<", "<<subs_X(1)<<"; is in tringle \n";
+				//std::cout<<node1_X(0)<<", "<<node1_X(1)<<"; "<<node2_X(0)<<", "<<node2_X(1)<<"; "<<node3_X(0)<<", "<<node3_X(1)<<"\n"; 
+				//std::cout<<"with barycentric coords "<<A1/A_tri<<", "<<A2/A_tri<<", "<<A3/A_tri<<"\n";
+				// point is in triangle, we can actually see where this point has moved and get force
+				// new x_subs position
+				subs_u = (A1/A_tri)*(x_t_subs[node1index]-X_t_subs[node1index])+(A2/A_tri)*(x_t_subs[node2index]-X_t_subs[node2index])+(A3/A_tri)*(x_t_subs[node3index]-X_t_subs[node3index]);
+			}
+		}
+
+		// COMPUTE INTEGRIN-LIGAND FORCE 
+		// so now we have the correct subs displacement and also the correct cell displacement 
+		// use total displacement to get the updated fa_u, remember fa_u is a vector going from 
+		// the substrate point to the cell point. Right now fa_u has the correct displacement between subs and cell from previous time step
+		// but now there are new cell and subs locations, use those to update fa_u 
+		fa_u[ni] = fa_u[ni] + cell_u - subs_u;  
+		// with this new integrin-ligand distance compute the force
+		// calculate single integrin force directly from stiffness and displacement 
+		//double k_FA = 1000; // pN/um 
+		double k_FA = kint;
+		double force_FA = k_FA* sqrt(fa_u[ni][0]*fa_u[ni][0] + fa_u[ni][1]*fa_u[ni][1]);
+		// update thinking of some well potential with the force
+		double k_on = 1; // 1/s 
+		double ka = 0.004; // 1/s
+		double kb = 10; // 1/s
+		double Fa = 15; //pN 
+		double Fb = 15; // pN based on Schumacher et al. 2021
+		double k_off = ka*exp(force_FA/Fa) + kb*exp(-force_FA/Fb); 
+		//std::cout<<"force per integrin "<<force_FA<<"\n";
+		double c_C_old = c_C[ni];
+		c_C[ni] = c_C[ni] + dt_real*k_on*(1-c_C[ni]) - dt_real*k_off*c_C[ni]; 
+		if(c_C[ni]<0){c_C[ni]=0;}
+
+		// now one more update the reference state
+		// this is the displacement of the old bonds 
+		// it accumulates from before 
+		//Vec3d u_x = fa_u + cell_u - subs_u ;
+		// but as some of these bonds dissapear and new ones are formed
+		// the actual reference should be a weighted sum of the new reference and the old
+		// the new ones have zero displacement, they should form stress-free so just need to drift the old ones 
+		//fa_u[ni] = u_x*(c_C_old - dt_real*k_off*c_C_old)/c_C[ni];
+		// Alternatively, just dissipate here 
+		if(c_C_old - dt_real*k_off*c_C_old>0 && c_C[ni]>0){
+			fa_u[ni] = fa_u[ni]*(c_C_old - dt_real*k_off*c_C_old)/c_C[ni];
+		}else{
+			fa_u[ni] = 0.0*fa_u[ni];
+		}
+	}
+}
+
