@@ -1,0 +1,33 @@
+
+relative_output_path sim_zebra
+
+frame_dt 1.0
+sim_dt 0.01
+end_sim_t 120
+
+surftrack_parameters
+(
+   use_fraction 0
+   min_edge_length 10.01
+   max_edge_length 51.2
+   max_volume_change 0.1
+   min_curvature_multiplier 0.5
+   max_curvature_multiplier 1.5
+   merge_proximity 5.001
+   repulsion_proximity 0.01
+   friction_coefficient 0.0
+   perform_improvement 1
+   allow_vertex_movement 1
+   allow_non_manifold 0
+   allow_topology_changes 1
+   collision_safety 1
+   subdivision_scheme butterfly
+)
+
+ecomsolfile
+(
+   filepath scripts/sph_mesh_082218.txt
+)
+
+
+

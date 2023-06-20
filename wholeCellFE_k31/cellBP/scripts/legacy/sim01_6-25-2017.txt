@@ -1,0 +1,45 @@
+
+relative_output_path sim_zebra
+
+frame_dt 0.5
+sim_dt 0.05
+end_sim_t 250
+
+invagination_simulation
+(
+   speed 0.0109
+)
+
+surftrack_parameters
+(
+   use_fraction 0
+   min_edge_length 10.01
+   max_edge_length 51.2
+   max_volume_change 0.1
+   min_curvature_multiplier 0.5
+   max_curvature_multiplier 1.5
+   merge_proximity 5.001
+   repulsion_proximity 0.01
+   friction_coefficient 0.0
+   perform_improvement 1
+   allow_vertex_movement 1
+   allow_non_manifold 0
+   allow_topology_changes 1
+   collision_safety 1
+   subdivision_scheme butterfly
+)
+
+ecomsolfile
+(
+   filepath scripts/half_sph_mesh_030118.txt
+)
+
+camera
+(
+   target [0.0 0.0 0.0]
+   distance 1.5
+   heading 0.0
+   pitch 0.0   
+)
+
+
