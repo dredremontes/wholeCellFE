@@ -873,8 +873,8 @@ void write_vtk(const NonDestructiveTriMesh &mesh, const std::vector<Vec3d> &x, c
     savefile<<"POINT_DATA "<<c_B.size()<<"\n";
 	savefile<<"SCALARS concentrations float 4\n";
 	savefile<<"LOOKUP_TABLE default\n";
-    double k_FA = 1000; // pN/um
-    //double k_FA = 31000;
+    //double k_FA = 1000; // pN/um
+    double k_FA = 31000;
     double rho_i_max = 100; // max integrin density in #/um^2 from "Influence of type I collagen surface density on fibroblast spreading, motility, and contractility.
 	for(int i=0;i<c_A.size();i++)
     {

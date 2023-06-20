@@ -81,7 +81,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 // updating the focal adhesions Andre's trash update
 void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t,double kint);
 // let's see if this works......
-void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real, const std::vector<Vec3d> &X_t_cell, const std::vector<Vec3d> &x_t_cell,const NonDestructiveTriMesh &mesh_cell, const std::vector<Vec3d> &X_t_subs, const std::vector<Vec3d> &x_t_subs,const NonDestructiveTriMesh &mesh_subs, double kint);
+void updateFA(std::vector<double> &c_A, std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real, const std::vector<Vec3d> &X_t_cell, const std::vector<Vec3d> &x_t_cell,const NonDestructiveTriMesh &mesh_cell, const std::vector<Vec3d> &X_t_subs, const std::vector<Vec3d> &x_t_subs,const NonDestructiveTriMesh &mesh_subs, double kint);
 
 // standalone driver for epibole, january 2019
 void driverVelocities_Zebrafish(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t,double dt, double t_tot);
@@ -347,13 +347,12 @@ namespace {
             // step that works for both surfaces 
             // time to update FA based on the deformed meshes 
             
-			// integrin stiffness update
+			// Andre trying to figure out how C++ works after taking his first C++ course 10 years ago
 			double kint;
-			// kint = 1000; // 1000 pN/um = 1 pN/nm
-	        kint = 31426.8556;
-            // kint = -1; // for MD purposes
+			//kint = 1000; // 1000 pN/um = 1 pN/nm... define the integrin stiffness in pN/um 
+            kint = 31000;
 			//updateFA(g_surf_cell->get_cC(), g_surf_cell->get_fa_u(), actual_dt, initial_positions, final_positions, kint);
-            updateFA(g_surf_cell->get_cC(), g_surf_cell->get_fa_u(), actual_dt, initial_positions, final_positions,g_surf_cell->m_mesh, initial_positions_subs, final_positions_subs,g_surf_subs->m_mesh, kint);
+            updateFA(g_surf_cell->get_cA(), g_surf_cell->get_cC(), g_surf_cell->get_fa_u(), actual_dt, initial_positions, final_positions,g_surf_cell->m_mesh, initial_positions_subs, final_positions_subs,g_surf_subs->m_mesh, kint);
 			
             // with the actual final positions and initial positions recompute the 
             // residual at the real time step, update the velocities, and also the strains
@@ -446,11 +445,7 @@ namespace {
                 // save at the end of the frame
                 char vtk_cell_filename[256];
                 sprintf( vtk_cell_filename, "%s/cell_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      
-                double kint;
-	            // kint = 1000; // 1000 pN/um = 1 pN/nm
-	            kint = 31426.8556;
-                // kint = -1; // for MD purposes   
-                write_vtk( g_surf_cell->m_mesh, g_surf_cell->get_positions(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_fa_u(), g_surf_cell->get_ea_t(), sim->m_curr_t, vtk_cell_filename, kint );   
+                write_vtk( g_surf_cell->m_mesh, g_surf_cell->get_positions(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_fa_u(), g_surf_cell->get_ea_t(), sim->m_curr_t, vtk_cell_filename );   
                 char vtk_subs_filename[256];
                 sprintf( vtk_subs_filename, "%s/subs_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      
                 //write_vtk( g_surf_subs->m_mesh, g_surf_subs->get_positions(), g_surf_subs->get_cA(),g_surf_subs->get_cB(),g_surf_subs->get_cC(),sim->m_curr_t, vtk_subs_filename );   
@@ -672,6 +667,12 @@ int main(int argc, char **argv)
     //
     
     init_simulation( argv[1], argv[2] );
+    // because the script only has mesh information, if we need to write concentrations
+    // then just doing it here so that it is not part of the init script file and just change here
+    for(int ni=0;ni<g_surf_cell->get_num_vertices();ni++){
+        g_surf_cell->get_cA()[ni] = 100; // integrin/um^2 
+        g_surf_cell->get_cC()[ni] =   0; // integrin bonds/um^2 
+    }
     
     
     //
@@ -711,16 +712,11 @@ int main(int argc, char **argv)
     // write frame 0
     //char binary_filename[256];
     //sprintf( binary_filename, "%s/frame%04d.bin", g_output_path, frame_stepper->get_frame() );      
-    //write_binary_file( g_surf->m_mesh, g_surf->get_positions(), g_surf->m_masses, sim->m_curr_t, binary_filename );
-
-    double kint;
-	// kint = 1000; // 1000 pN/um = 1 pN/nm
-	kint = 31426.8556;
-    // kint = -1; // for MD purposes   
+    //write_binary_file( g_surf->m_mesh, g_surf->get_positions(), g_surf->m_masses, sim->m_curr_t, binary_filename );   
     
     char vtk_filename[256];
     sprintf( vtk_filename, "%s/cell_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      
-    write_vtk( g_surf_cell->m_mesh, g_surf_cell->get_positions(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(), g_surf_cell->get_fa_u(), g_surf_cell->get_ea_t(), sim->m_curr_t, vtk_filename, kint );
+    write_vtk( g_surf_cell->m_mesh, g_surf_cell->get_positions(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(), g_surf_cell->get_fa_u(), g_surf_cell->get_ea_t(), sim->m_curr_t, vtk_filename );
     char vtk_filename2[256];
     sprintf( vtk_filename2, "%s/subs_frame%04d.vtk", g_output_path, frame_stepper->get_frame() );      
     //write_vtk( g_surf_subs->m_mesh, g_surf_subs->get_positions(), g_surf_subs->get_cA(),g_surf_subs->get_cB(),g_surf_subs->get_cC(), sim->m_curr_t, vtk_filename );

@@ -841,7 +841,7 @@ void write_vtk(const NonDestructiveTriMesh &mesh, const std::vector<Vec3d> &x,co
 ///
 // ---------------------------------------------------------
 
-void write_vtk(const NonDestructiveTriMesh &mesh, const std::vector<Vec3d> &x, const std::vector<double> &c_A,const std::vector<double> &c_B,const std::vector<double> &c_C,const std::vector<Vec3d> &fa_u, const std::vector<Eigen::VectorXd> &ea_t, double current_time, const char* filename)
+void write_vtk(const NonDestructiveTriMesh &mesh, const std::vector<Vec3d> &x, const std::vector<double> &c_A,const std::vector<double> &c_B,const std::vector<double> &c_C,const std::vector<Vec3d> &fa_u, const std::vector<Eigen::VectorXd> &ea_t, double current_time, const char* filename, double kint)
 {
     std::ofstream savefile(filename);
     if (!savefile) {
@@ -873,8 +873,8 @@ void write_vtk(const NonDestructiveTriMesh &mesh, const std::vector<Vec3d> &x, c
     savefile<<"POINT_DATA "<<c_B.size()<<"\n";
 	savefile<<"SCALARS concentrations float 4\n";
 	savefile<<"LOOKUP_TABLE default\n";
-    double k_FA = 1000; // pN/um
-    //double k_FA = 31000;
+    //double k_FA = 1000; // pN/um
+    double k_FA = 31000;
     double rho_i_max = 100; // max integrin density in #/um^2 from "Influence of type I collagen surface density on fibroblast spreading, motility, and contractility.
 	for(int i=0;i<c_A.size();i++)
     {
@@ -920,11 +920,40 @@ void write_vtk(const NonDestructiveTriMesh &mesh, const std::vector<Vec3d> &x, c
         double FA_force_x = c_C[i]*k_FA*fa_u[i][0]*Asum*rho_i_max;
         double FA_force_y = c_C[i]*k_FA*fa_u[i][1]*Asum*rho_i_max;
         double normFA = sqrt(FA_force_x*FA_force_x + FA_force_y*FA_force_y );
-        double Fint_force_x = k_FA*fa_u[i][0];
-        double Fint_force_y = k_FA*fa_u[i][1];
-        double normFint = sqrt(Fint_force_x*Fint_force_x + Fint_force_y*Fint_force_y );
 
-        savefile<<c_A[i]<<" "<<theta_e_t<<" "<<c_C[i]<<" "<<normFint<<"\n";
+        double force_s; // spring force vector
+		double D  = sqrt(fa_u[i][0]*fa_u[i][0] + fa_u[i][1]*fa_u[i][1] + fa_u[i][2]*fa_u[i][2]); // displacement of the spring
+		
+		int fFA_npts = 6; // for 1 nm/ns pull rate piecewise linear fit
+			
+		Eigen::VectorXd pxFA(fFA_npts); pxFA.setZero();
+		pxFA<< 0.,  2.51250583e-03,  4.40265201e-03,  5.91408228e-03, 11.76817302e-03, 17.001e-03; // extension in um
+		
+		Eigen::VectorXd pyFA(fFA_npts); pyFA.setZero();
+		pyFA<< -7.15514497,  71.80501308, 356.62420075, 356.96656556, 126.21811585, 528.40481124; // force in pN
+
+		Eigen::VectorXd k_MD(fFA_npts); k_MD.setZero();
+		k_MD<< 31426.8556 , 99485.86235, 67080.67086, -7908.39043, 21978.66923, 76858.39733; // integrin stiffness in pN/um
+		
+		if(kint<0){
+			for(int j=0;j<fFA_npts-1;j++){ // depending on the integrin displacement u_x, the spring stiffness is assigned
+				if(D<pxFA[j+1] && D>=pxFA[j]){
+					force_s = pyFA[j]+k_MD[j]*(D-pxFA[j]);
+				}else if(D>=pxFA[fFA_npts-1]){
+					force_s = pyFA[fFA_npts-1]+k_MD[fFA_npts-1]*(D-pxFA[fFA_npts-1]);
+				}
+			}
+		}
+		else{
+			force_s = kint*D;
+		}
+
+        // double Fint_force_x = k_FA*fa_u[i][0];
+        // double Fint_force_y = k_FA*fa_u[i][1];
+        // double normFint = sqrt(Fint_force_x*Fint_force_x + Fint_force_y*Fint_force_y );
+
+        // savefile<<c_A[i]<<" "<<theta_e_t<<" "<<c_C[i]<<" "<<normFint<<"\n";
+        savefile<<c_A[i]<<" "<<theta_e_t<<" "<<c_C[i]<<" "<<force_s<<"\n";
     }
     savefile<<"VECTORS fa_u float\n";
     for(int ni=0;ni<x.size();ni++){
