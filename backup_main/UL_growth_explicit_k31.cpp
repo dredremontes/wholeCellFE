@@ -455,8 +455,8 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	// Calculate the force from the cells on the substrate
 	Eigen::VectorXd F_FA(n_node*3);F_FA.setZero();
 	double kint;
-	kint = 1000; // 1000 pN/um = 1 pN/nm
-	// kint = 31000;
+	//kint = 1000; // 1000 pN/um = 1 pN/nm
+	kint = 31000;
 	// if(t_tot<4){
 	//	kint = 1000; // 1000 pN/um = 1 pN/nm 
 	//}else if(t_tot<8){
@@ -556,8 +556,8 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	// Update focal adhesion concentration
 	std::cout<<"going to eval constraint from FA\n";
 	double kint;
-	kint = 1000; // 1000 pN/um = 1 pN/nm
-	// kint = 31000;
+	//kint = 1000; // 1000 pN/um = 1 pN/nm
+	kint = 31000;
 
 	calculateForce_FA(F_FA,X_t,x_t,c_C,fa_u,mesh,kint);
 
@@ -739,6 +739,7 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 		// }
 	}
 	// active stress
+	// for isotropic case (kappa = 0.5), change to 2x the t_act desired. So for 200 Pa, set t_act = 400
 	double t_act = 0; 
 	if(mat==1){
 		 if(time<2){
@@ -1017,6 +1018,7 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 		// }
 	}
 	// active stress
+	// for isotropic case (kappa = 0.5), change to 2x the t_act desired. So for 200 Pa, set t_act = 400
 	double t_act = 0; 
 	if(mat==1){
 		 if(time<2){
