@@ -76,9 +76,7 @@ Simulation frames (.vtk files) can be read by Paraview for visualization, data e
 
 Updating integrin stiffness run:
 =====================
-The three integrin stiffness settings (baseline, 31 pN/nm, MD-driven) require separate `main.cpp` and `UL_growth_explicit.cpp` files. In `./wholeCellFE/backup_main` there are .cpp files for each simulation setting which would have to replace the `main.cpp` and `UL_growth_explicit.cpp` files in `./wholeCellFE/cellBP/`. The .cpp files used must be named `main.cpp` and `UL_growth_explicit.cpp`.
-
-Alternatively, for constant integrin stiffness values only, the variable, "`kint`", can be updated in pN/um within `UL_growth_explicit.cpp`.
+The three integrin stiffness settings (1 pN/nm, 31 pN/nm, MD-driven) are configured in their own folders labeled wholeCellFE_k1, wholeCellFE_k31, and wholeCellFE_kMD, accordingly. Each model requires separate `main.cpp`,`iomesh.cpp`, and `UL_growth_explicit.cpp` files to run, so they are separated by folder.
 
 Code base:
 =====================
