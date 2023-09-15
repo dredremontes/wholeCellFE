@@ -32,6 +32,7 @@ void calculateBendingForce2D(Eigen::VectorXd &F_bending, const std::vector<Vec3d
 double calculateAreaTot(const std::vector<Vec3d> &x_t,const NonDestructiveTriMesh &mesh);
 void calculateAreaConstraintForce(Eigen::VectorXd &F_areaConstraint, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, const NonDestructiveTriMesh &mesh, double tot_area);
 void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t,double kint);
+void updateSF(std::vector<double> &c_A, std::vector<double> &c_B, double dt_real, std::vector<Eigen::VectorXd> &ea_t, std::vector<Eigen::VectorXd> &ea_temp);
 
 // Driver for Zebrafish based on reading from file
 void driverVelocities_Zebrafish(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t,double dt, double t_tot){
@@ -574,6 +575,9 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	//double rho = 1.0; // [ug/um^3] also not sure if this is good or not
 	//double rho = 1000.0; // [kg/m^3] 
 	double rho = 1.0; // [pg/um^3] 
+
+	std::vector<Eigen::VectorXd> ea_temp = ea_t; // array of 6x1 vectors
+
 	// Update acceleration and strain
 	for(int ni=0;ni<n_node;ni++){
 		// updating the acceleration
@@ -581,16 +585,21 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 		A_t[ni][1] = (f_t(ni*3+1)-damp*MM(ni)*rho*V_t[ni][1])/(MM(ni)*rho);
 		A_t[ni][2] = (f_t(ni*3+2)-damp*MM(ni)*rho*V_t[ni][2])/(MM(ni)*rho);	
 		// updating the strains at the nodes
-		ea_t[ni](0) = Res_ea(ni*6+0)/MM(ni);
-		ea_t[ni](1) = Res_ea(ni*6+1)/MM(ni);
-		ea_t[ni](2) = Res_ea(ni*6+2)/MM(ni);
-		ea_t[ni](3) = Res_ea(ni*6+3)/MM(ni);
-		ea_t[ni](4) = Res_ea(ni*6+4)/MM(ni);
-		ea_t[ni](5) = Res_ea(ni*6+5)/MM(ni);
+		ea_temp[ni](0) = Res_ea(ni*6+0)/MM(ni);
+		ea_temp[ni](1) = Res_ea(ni*6+1)/MM(ni);
+		ea_temp[ni](2) = Res_ea(ni*6+2)/MM(ni);
+		ea_temp[ni](3) = Res_ea(ni*6+3)/MM(ni);
+		ea_temp[ni](4) = Res_ea(ni*6+4)/MM(ni);
+		ea_temp[ni](5) = Res_ea(ni*6+5)/MM(ni);
 		//std::cout<<"node "<<ni<<", f_t = "<<f_t(ni*3+0)<<", "<<f_t(ni*3+1)<<", "<<f_t(ni*3+2)<<"\n";
 		//std::cout<<"node "<<ni<<", Res = "<<Res(ni*3+0)<<", "<<Res(ni*3+1)<<", "<<Res(ni*3+2)<<"\n";
 	}
 	
+	// Update Stress Fiber Concentrations
+	updateSF(c_A, c_B, dt_real, ea_t, ea_temp);
+	
+	// Update the strains to ea_t
+	ea_t = ea_temp; 
 	
 	// Update the velocities for next time step
 	for(int ni=0;ni<n_node;ni++){
@@ -666,15 +675,6 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 	// constants and parameters
 	//double mu = 1.0e1; // [mili-Pa] material parameter
 	double thetag_dot = 0.0; //0.0009; //0.005; // growth rate area_change/time_units, 0.01 is growth of 1% per second
-
-	// these values are taken for chondrocytes on a rigid substrate: Dowling et al. Acta Biomaterialia. 2013.
-	double C_SF = 1; // dimensionless activation signal - rigid substrate assumption indicates that stress fibers are constantly activated
-	double kf = 10; // [1/s] reaction rate of formation
-	double kb = 1; // [1/s] reaction rate of breaking
-	double kv = 7; // dimensionless reduction in fiber stress upon increasing the shortening rate relative to eps_dot_0
-	double theta_SF = 70; // [s] decay constant
-	double eps_dot_0 = 0.003; // [1/s] reference strain rate
-	double T_max = 850; // [Pa] maximum contraction
 
 	// example 1, biaxial test with no growth
 	//double mu = 75000.0; // Pa, from a value we are using for skin 
@@ -773,6 +773,10 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 	double theta_e = theta*theta_e_t/theta_g;
 	// what about the volume change? Je_t = Je = 1, so Jdelta = Jg = theta_g
 
+	int N_d = 10; 										// number of segments for trapezoidal integration of stress fibers
+	double dN = M_PI/(N_d-1); 							// segment spacing
+	double phi = -M_PI/2; 								// initialization of first stress fiber angle
+
 	// ABT 08/02/2018. Growth in response to elastic stretch
 	//double K_thetae = 1.5;
 	//double p_thetag = 0.0; // [1/sec]
@@ -794,44 +798,21 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 	Eigen::VectorXd ea_s_vec(6);
 	ea_s_vec<<ea_s(0,0),ea_s(1,1),ea_s(2,2),ea_s(0,1),ea_s(0,2),ea_s(1,2);
 
-	Eigen::Matrix3d eps_dot = (ea_s - ea_t)/dt_real; 	// material strain rate
-	int N_d = 10; 										// number of segments for trapezoidal integration of stress fibers
-	double dN = M_PI/(N_d-1); 							// segment spacing
-	double phi = -M_PI/2; 								// initialization of first stress fiber angle
-	double t_act = 1/3*(c_A[node1index]+c_A[node2index]+c_A[node3index]); 	// this will need to be tracked over the simulation per node - assign to c_A[]
-	double eta = 1/3*(c_B[node1index]+c_B[node2index]+c_B[node3index]); 	// SF concentration, this will need to be tracked over the simulation - assign to c_B[]
-	double eta_dot = (1-eta)*C_SF*kf/theta_SF-kb/theta_SF*(eta-t_act/T_max); // rate of change of concentration
-	double S_11 = 0; // 11 component of active fiber stress 
-	double S_12 = 0; // 12 component of active fiber stress
-	double S_22 = 0; // 22 component of active fiber stress
 	Eigen::Matrix3d Sact;
 	Sact.setZero();
 
-	// store t_act and eta for each node... there has to be a better way to distribute, maybe similar to FAs?
-	c_A[node1index] = t_act;
-	c_A[node2index] = t_act;
-	c_A[node3index] = t_act;
-	c_B[node1index] = eta;
-	c_B[node2index] = eta;
-	c_B[node3index] = eta;
+	double S_11 = 0;
+	double S_12 = 0;
+	double S_22 = 0;
 
 	// only update the contractility based on SF for the cell model 
 	if(mat==1){
+		// active stress calculated by update Stress Fibers function
+		double t_act = 1/3*(c_A[node1index]+c_A[node2index]+c_A[node3index]);
 		// trapezoidal integration
 		for(int i=0;i<N_d;i++){
 			phi = -M_PI/2 + i*dN;
-			// calculate the strain rate of the stress fibers
-			double eps_dot_SF = eps_dot(0,1)*cos(phi)*cos(phi)+eps_dot(1,1)*sin(phi)*sin(phi)+eps_dot(0,1)*sin(2*phi);
-				// update contractility
-				if(eps_dot_SF/eps_dot_0 <= -eta/kv){
-					t_act = 0;
-				}else if(-eta/kv <= eps_dot_SF/eps_dot_0 && eps_dot_SF/eps_dot_0 <= 0){
-					t_act = eta*T_max*(1-kv/eta*eps_dot_SF/eps_dot_0);
-				}else if(eps_dot_SF/eps_dot_0 > 0){
-					t_act = eta*T_max;
-				}	
-			
-			// create components of the Sact matrix
+			// create components of the Sact matrix with traction and trapezoidal integration
 			if(i==0){
 				S_11 = t_act*cos(phi)*cos(phi);
 				S_12 = t_act*sin(2*phi);
@@ -855,13 +836,11 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 		Sact << S_11, S_12, 0,
 				S_12, S_22, 0,
 				0,	0,	0;
+		// Sact = t_act*Id; 
 	}else if(mat==2){
 		
 		Sact = 0*Id; // no active stress in the substrate
 	}
-
-	// update concentration
-	eta = eta + dt_real*eta_dot;
 
 	Eigen::Matrix3d S = Sact + Spas; 
 
@@ -1410,6 +1389,58 @@ void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real
 		}else{
 			fa_u[ni] = 0.0*fa_u[ni];
 		}
+	}
+}
+
+// Update Stress Fiber Concentration and traction
+void updateSF(std::vector<double> &c_A, std::vector<double> &c_B, double dt_real, std::vector<Eigen::VectorXd> &ea_t, std::vector<Eigen::VectorXd> &ea_temp){
+	
+	// these values are taken for chondrocytes on a rigid substrate: Dowling et al. Acta Biomaterialia. 2013.
+	double C_SF = 1; // dimensionless activation signal - rigid substrate assumption indicates that stress fibers are constantly activated
+	double kf = 10; // [1/s] reaction rate of formation
+	double kb = 1; // [1/s] reaction rate of breaking
+	double kv = 7; // dimensionless reduction in fiber stress upon increasing the shortening rate relative to eps_dot_0
+	double theta_SF = 70; // [s] decay constant
+	double eps_dot_0 = 0.003; // [1/s] reference strain rate
+	double T_max = 850; // [Pa] maximum contraction
+
+	int N_d = 10; 										// number of segments for trapezoidal integration of stress fibers
+	double dN = M_PI/(N_d-1); 							// segment spacing
+	double phi = -M_PI/2; 								// initialization of first stress fiber angle
+	// double t_act = 1/3*(c_A[node1index]+c_A[node2index]+c_A[node3index]); 	// this will need to be tracked over the simulation per node - assign to c_A[]
+	// double eta = 1/3*(c_B[node1index]+c_B[node2index]+c_B[node3index]); 	// SF concentration, this will need to be tracked over the simulation - assign to c_B[]
+
+	int n_node = c_A.size();
+	for(int ni=0;ni<n_node;ni++){
+		
+		Eigen::VectorXd eps_dot = (ea_t[ni] - ea_temp[ni])/dt_real; 	// material strain rate in vector form
+		
+		double t_act = c_A[ni];		// stress fiber traction 
+		double eta = c_B[ni];		// stress fiber concentration 
+		double eta_dot = (1-eta)*C_SF*kf/theta_SF-kb/theta_SF*(eta-t_act/T_max); // rate of change of concentration
+		double eps_dot_SF = 0; // initialize the strain rate to be integrated over the fiber directions
+
+		for(int i=0;i<N_d;i++){
+			phi = -M_PI/2 + i*dN;
+			// calculate the strain rate of the stress fibers
+			double eps_dot_SF = eps_dot_SF + eps_dot(0)*cos(phi)*cos(phi)+eps_dot(1)*sin(phi)*sin(phi)+eps_dot(3)*sin(2*phi);
+		}
+
+		// update contractility
+		if(eps_dot_SF/eps_dot_0 <= -eta/kv){
+			t_act = 0;
+		}else if(-eta/kv <= eps_dot_SF/eps_dot_0 && eps_dot_SF/eps_dot_0 <= 0){
+			t_act = eta*T_max*(1+kv/eta*eps_dot_SF/eps_dot_0);
+		}else if(eps_dot_SF/eps_dot_0 > 0){
+			t_act = eta*T_max;
+		}	
+
+		// store fiber orientation, theta
+		// dispersion, kappa 
+
+		// reassign new values of contractility and concentration
+		c_A[ni] = t_act;
+		c_B[ni] = eta + dt_real*eta_dot;
 	}
 }
 
