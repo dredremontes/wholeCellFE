@@ -74,10 +74,10 @@ void driverVelocities_Uniaxial(const std::vector<Vec3d> &X_t, std::vector<Vec3d>
 void driverVelocities_OffBiaxial(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hfl, std::vector<Vec3d> &A_t,double dt, double t_tot);
 void driverVelocities_Biaxial(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hfl, std::vector<Vec3d> &A_t,double dt, double t_tot);
 void driverVelocities_BulgeTest(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hfl, std::vector<Vec3d> &A_t,double dt, double t_tot);
-void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<double> &c_A, std::vector<double> &c_B);
-void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<Vec3d> &fa_u, std::vector<double> &c_A, std::vector<double> &c_B, const std::vector<double> &c_C, const std::vector<Vec3d> &x_cell, const NonDestructiveTriMesh &mesh_cell);
+void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<double> &c_A, std::vector<double> &c_B, std::vector<Vec3d> &a_i);
+void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<Vec3d> &fa_u, std::vector<Vec3d> &a_i, std::vector<double> &c_A, std::vector<double> &c_B, const std::vector<double> &c_C, const std::vector<Vec3d> &x_cell, const NonDestructiveTriMesh &mesh_cell);
 void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, 
-    std::vector<double> &c_A, std::vector<double> &c_B, std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot);
+    std::vector<double> &c_A, std::vector<double> &c_B, std::vector<double> &c_C, std::vector<Vec3d> &fa_u, std::vector<Vec3d> &a_i, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot);
 
 // standalone driver for epibole, january 2019
 void driverVelocities_Zebrafish(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t,double dt, double t_tot);
@@ -258,7 +258,7 @@ namespace {
             // residual at the real time step, update the velocities, and also the strains
             //updateForces_Explicit(initial_positions, final_positions, g_surf->get_V_t(), V_t_hlf, g_surf->get_A_t(), g_surf->get_ea_t(), ori_dt, actual_dt, g_surf->m_mesh, sim->m_curr_t);
             // update forces including concentrations 
-            updateForces_Explicit(initial_positions, final_positions, g_surf_cell->get_V_t(), V_t_hlf, g_surf_cell->get_A_t(), g_surf_cell->get_ea_t(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_fa_u(), ori_dt, actual_dt, g_surf_cell->m_mesh, sim->m_curr_t);
+            updateForces_Explicit(initial_positions, final_positions, g_surf_cell->get_V_t(), V_t_hlf, g_surf_cell->get_A_t(), g_surf_cell->get_ea_t(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_fa_u(),g_surf_cell->get_a_i(), ori_dt, actual_dt, g_surf_cell->m_mesh, sim->m_curr_t);
             
             //
             // file output
@@ -376,7 +376,7 @@ namespace {
 			
 			// comment below for no_subs model
 			
-            updateForces_Explicit(initial_positions, final_positions, g_surf_subs->get_V_t(), V_t_hlf, g_surf_subs->get_A_t(), g_surf_subs->get_ea_t(), ori_dt, actual_dt, g_surf_subs->m_mesh, sim->m_curr_t, g_surf_cell->get_fa_u(),g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_positions(),g_surf_cell->m_mesh);
+            updateForces_Explicit(initial_positions, final_positions, g_surf_subs->get_V_t(), V_t_hlf, g_surf_subs->get_A_t(), g_surf_subs->get_ea_t(), ori_dt, actual_dt, g_surf_subs->m_mesh, sim->m_curr_t, g_surf_cell->get_fa_u(), g_surf_cell->get_a_i(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_positions(),g_surf_cell->m_mesh);
             
             //
             // file output
@@ -601,7 +601,7 @@ namespace {
         
         // NOTE: initializer for concentrations, velocities, accelerations 
         std::cout<<"initialize cell surfTrack\n";
-        g_surf_cell = new SurfTrack( script_init.vertices, script_init.triangles, script_init.masses,script_init.c_A,script_init.c_B,script_init.c_C,script_init.V_t,script_init.A_t,script_init.ea_t,script_init.fa_u, script_init.surf_track_params );   
+        g_surf_cell = new SurfTrack( script_init.vertices, script_init.triangles, script_init.masses,script_init.c_A,script_init.c_B,script_init.c_C,script_init.V_t,script_init.A_t,script_init.ea_t,script_init.fa_u, script_init.a_i, script_init.surf_track_params );   
         std::cout<<"defrag mesh\n";
         g_surf_cell->defrag_mesh();
 
@@ -613,7 +613,7 @@ namespace {
         
         
         std::cout<<"initialize subs surfTrack\n";
-        g_surf_subs = new SurfTrack( script_init_subs.vertices, script_init_subs.triangles, script_init_subs.masses,script_init_subs.c_A,script_init_subs.c_B,script_init_subs.c_C,script_init_subs.V_t,script_init_subs.A_t,script_init_subs.ea_t,script_init.fa_u, script_init_subs.surf_track_params );   
+        g_surf_subs = new SurfTrack( script_init_subs.vertices, script_init_subs.triangles, script_init_subs.masses,script_init_subs.c_A,script_init_subs.c_B,script_init_subs.c_C,script_init_subs.V_t,script_init_subs.A_t,script_init_subs.ea_t,script_init.fa_u, script_init.a_i, script_init_subs.surf_track_params );   
         std::cout<<"defrag mesh\n";
         g_surf_subs->defrag_mesh();
         

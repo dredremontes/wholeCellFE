@@ -111,7 +111,7 @@ DynamicSurface::DynamicSurface( const std::vector<Vec3d>& vertex_positions,
 /// DynamicSurface other constructor.  Includes concentrations.
 ///
 // ---------------------------------------------------------
-
+// Andre's a_i addition
 DynamicSurface::DynamicSurface( const std::vector<Vec3d>& vertex_positions, 
                                const std::vector<Vec3st>& triangles,
                                const std::vector<double>& masses,
@@ -122,6 +122,7 @@ DynamicSurface::DynamicSurface( const std::vector<Vec3d>& vertex_positions,
                                const std::vector<Vec3d>& A_t,
                                const std::vector<Eigen::VectorXd>& ea_t,
                                const std::vector<Vec3d>& fa_u,
+                               const std::vector<Vec3d>& a_i,
                                double in_proximity_epsilon,
                                double in_friction_coefficient,
                                bool in_collision_safety,
@@ -137,6 +138,7 @@ DynamicSurface::DynamicSurface( const std::vector<Vec3d>& vertex_positions,
     m_At(A_t),
     m_eat(ea_t),
     m_fau(fa_u),
+    m_ai(a_i),
     m_mesh(), 
     m_broad_phase( new BroadPhaseGrid() ),
     m_collision_pipeline( *this, *m_broad_phase, in_friction_coefficient ),    // allocated and initialized in the constructor body

@@ -71,6 +71,7 @@ public:
                    const std::vector<Vec3d>& A_t,
                    const std::vector<Eigen::VectorXd>& ea_t,
                    const std::vector<Vec3d>& fa_u,
+                   const std::vector<Vec3d>& a_i,
                    double in_proximity_epsilon = 1e-4,
                    double in_friction_coefficient = 0.0,
                    bool in_collision_safety = true,
@@ -206,6 +207,7 @@ public:
     std::vector<Vec3d>& get_A_t( );
     std::vector<Eigen::VectorXd>& get_ea_t( );
     std::vector<Vec3d>& get_fa_u( );
+    std::vector<Vec3d>& get_a_i( );
     void set_position( size_t index, const Vec3d& x );       
     void set_all_positions( const std::vector<Vec3d>& xs );
     void set_all_positions( size_t n, const double* xs );
@@ -245,6 +247,9 @@ public:
 
     // fa displacement
     std::vector<Vec3d> m_fau;
+
+    // Andre's a_i's
+    std::vector<Vec3d> m_ai;
 
     /// The mesh graph
     NonDestructiveTriMesh m_mesh;
@@ -694,6 +699,11 @@ inline std::vector<Eigen::VectorXd>& DynamicSurface::get_ea_t( )
 inline std::vector<Vec3d>& DynamicSurface::get_fa_u( )
 {
     return m_fau;
+}
+// Andre's a_i addition
+inline std::vector<Vec3d>& DynamicSurface::get_a_i( )
+{
+    return m_ai;
 }
 // --------------------------------------------------------
 

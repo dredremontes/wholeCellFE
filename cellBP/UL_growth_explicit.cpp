@@ -19,8 +19,8 @@
 // function declarations
 //void driverVelocities_Explicit(std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t,double dt);
 //void updateForces_Explicit(std::vector<Vec3d> &X_t, std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh);
-void calculateRes(const std::vector<Vec3d> &X_t,const std::vector<Vec3d> &x_t, std::vector<Eigen::VectorXd> &ea_t,const NonDestructiveTriMesh &mesh, double dt_real, Eigen::VectorXd &Res, Eigen::VectorXd &Res_ea, Eigen::VectorXd &MM, int mat, double time, std::vector<double> &c_A, std::vector<double> &c_B);
-void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Vector3d &node3_X, Eigen::Vector3d &node1_x, Eigen::Vector3d &node2_x, Eigen::Vector3d &node3_x, Eigen::VectorXd &node1_ea, Eigen::VectorXd &node2_ea, Eigen::VectorXd &node3_ea, double dt_real, Eigen::VectorXd &Re, Eigen::VectorXd &Re_ea, Eigen::Vector3d &MMe, int mat, double time, std::vector<double> &c_A, std::vector<double> &c_B, int node1index, int node2index, int node3index);
+void calculateRes(const std::vector<Vec3d> &X_t,const std::vector<Vec3d> &x_t, std::vector<Eigen::VectorXd> &ea_t,const NonDestructiveTriMesh &mesh, double dt_real, Eigen::VectorXd &Res, Eigen::VectorXd &Res_ea, Eigen::VectorXd &MM, int mat, double time, std::vector<Vec3d> &a_i);
+void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Vector3d &node3_X, Eigen::Vector3d &node1_x, Eigen::Vector3d &node2_x, Eigen::Vector3d &node3_x, Eigen::VectorXd &node1_ea, Eigen::VectorXd &node2_ea, Eigen::VectorXd &node3_ea, double dt_real, Eigen::VectorXd &Re, Eigen::VectorXd &Re_ea, Eigen::Vector3d &MMe, int mat, double time, std::vector<Vec3d> &a_i, int node1index, int node2index, int node3index);
 void calculateConstraintForce(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &x_t);
 void calculatePressureForce(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &x_t, const Eigen::VectorXd &MM, const NonDestructiveTriMesh &mesh, double t_tot);
 void calculateBendingRes(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, const NonDestructiveTriMesh &mesh, Eigen::VectorXd &Res_bending);
@@ -32,7 +32,7 @@ void calculateBendingForce2D(Eigen::VectorXd &F_bending, const std::vector<Vec3d
 double calculateAreaTot(const std::vector<Vec3d> &x_t,const NonDestructiveTriMesh &mesh);
 void calculateAreaConstraintForce(Eigen::VectorXd &F_areaConstraint, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, const NonDestructiveTriMesh &mesh, double tot_area);
 void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real, const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t,double kint);
-void updateSF(std::vector<double> &c_A, std::vector<double> &c_B, double dt_real, std::vector<Eigen::VectorXd> &ea_t, std::vector<Eigen::VectorXd> &ea_temp);
+void updateSF(std::vector<double> &c_A, std::vector<Vec3d> &a_i, double dt_real, std::vector<Eigen::VectorXd> &ea_t, std::vector<Eigen::VectorXd> &ea_temp);
 
 // Driver for Zebrafish based on reading from file
 void driverVelocities_Zebrafish(const std::vector<Vec3d> &X_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t,double dt, double t_tot){
@@ -345,7 +345,7 @@ void driverVelocities_Biaxial(const std::vector<Vec3d> &X_t, std::vector<Vec3d> 
 }
 
 // This is the default function, doesnt include cell-substrate interactions or anything like that
-void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<double> &c_A, std::vector<double> &c_B){
+void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<double> &c_A, std::vector<double> &c_B, std::vector<Vec3d> &a_i){
 
 	// Central difference following Belytshko Page 333 
 
@@ -367,7 +367,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	std::cout<<"number of nodes= "<<n_node<<"\n";
 	//******************************************************//
 	int mat = 1; // cell
-	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM,mat,t_tot,c_A,c_B); 
+	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM,mat,t_tot,a_i); 
 	//******************************************************//
 
 	// Calculate the force constraint, forces needed to enforce things like:
@@ -420,7 +420,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 }
 
 // This function includes the vector of focal adhesion attachements to model cell-subs interaction
-void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<Vec3d> &fa_u, std::vector<double> &c_A, std::vector<double> &c_B, const std::vector<double> &c_C, const std::vector<Vec3d> &x_cell, const NonDestructiveTriMesh &mesh_cell){
+void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot, std::vector<Vec3d> &fa_u, std::vector<Vec3d> &a_i, std::vector<double> &c_A, std::vector<double> &c_B, const std::vector<double> &c_C, const std::vector<Vec3d> &x_cell, const NonDestructiveTriMesh &mesh_cell){
 
 	// Central difference following Belytshko Page 333 
 
@@ -443,7 +443,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 
 	//******************************************************//
 	int mat = 2; // for substrate 
-	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM,mat,t_tot,c_A,c_B); 
+	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM,mat,t_tot,a_i); 
 	//******************************************************//
 
 	// Calculate the force from the cells on the substrate
@@ -492,7 +492,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 
 // This is the overwritten version for the cell because it includes volume control, bending of membrane
 void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Vec3d> &V_t, std::vector<Vec3d> &V_t_hlf, std::vector<Vec3d> &A_t, std::vector<Eigen::VectorXd> &ea_t, 
-	std::vector<double> &c_A, std::vector<double> &c_B, std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot){
+	std::vector<double> &c_A, std::vector<double> &c_B, std::vector<double> &c_C, std::vector<Vec3d> &fa_u, std::vector<Vec3d> &a_i, double dt, double dt_real, const NonDestructiveTriMesh &mesh, double t_tot){
 
 	// Central difference following Belytshko Page 333 
 
@@ -516,7 +516,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	// This residual includes both passive and active stresses 
 	//******************************************************//
 	int mat = 1; // for cell
-	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM, mat, t_tot, c_A, c_B); 
+	calculateRes(X_t,x_t,ea_t,mesh,dt_real, Res,Res_ea,MM, mat, t_tot, a_i); 
 	//******************************************************//
 
 	// Calculate the force constraint, forces needed to enforce things like:
@@ -536,6 +536,8 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 
 	calculateForce_FA(F_FA,X_t,x_t,c_C,fa_u,mesh,kint);
 	updateFA(c_C, fa_u, dt_real,X_t,x_t,kint);
+
+	
 
 	// Also need to add some actin polymerization force 
 	calculateForce_AP(F_AP,X_t,x_t,c_A,mesh);	
@@ -596,11 +598,11 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	}
 	
 	// Update Stress Fiber Concentrations
-	updateSF(c_A, c_B, dt_real, ea_t, ea_temp);
-	
+	updateSF(c_A, a_i, dt_real, ea_t, ea_temp);
+
 	// Update the strains to ea_t
-	ea_t = ea_temp; 
-	
+	ea_t = ea_temp;
+
 	// Update the velocities for next time step
 	for(int ni=0;ni<n_node;ni++){
 		if(dt_real>dt/2.0){
@@ -612,7 +614,7 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 
 }
 
-void calculateRes(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Eigen::VectorXd> &ea_t,const NonDestructiveTriMesh &mesh, double dt_real, Eigen::VectorXd &Res, Eigen::VectorXd &Res_ea, Eigen::VectorXd &MM, int mat, double time, std::vector<double> &c_A, std::vector<double> &c_B){
+void calculateRes(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, std::vector<Eigen::VectorXd> &ea_t,const NonDestructiveTriMesh &mesh, double dt_real, Eigen::VectorXd &Res, Eigen::VectorXd &Res_ea, Eigen::VectorXd &MM, int mat, double time, std::vector<Vec3d> &a_i){
 	Res.setZero();
 	Res_ea.setZero();
 	MM.setZero();
@@ -652,7 +654,7 @@ void calculateRes(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, 
 				
         // subroutine to evaluate the element
         //std::cout<<"evaluating element "<<ei<<"\n";
-        evalElementRe(node1_X,node2_X,node3_X,node1_x,node2_x,node3_x,node1_ea,node2_ea,node3_ea, dt_real, Re, Re_ea, MMe, mat, time, c_A, c_B, node1index, node2index, node3index);
+        evalElementRe(node1_X,node2_X,node3_X,node1_x,node2_x,node3_x,node1_ea,node2_ea,node3_ea, dt_real, Re, Re_ea, MMe, mat, time, a_i, node1index, node2index, node3index);
         //std::cout<<"element residual norm "<<Re.norm()<<"\n";
         // LOOP OVER NODES
 		for(int nodei=0;nodei<3;nodei++){
@@ -670,7 +672,7 @@ void calculateRes(const std::vector<Vec3d> &X_t, const std::vector<Vec3d> &x_t, 
 }
 
 
-void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Vector3d &node3_X, Eigen::Vector3d &node1_x, Eigen::Vector3d &node2_x, Eigen::Vector3d &node3_x, Eigen::VectorXd &node1_ea, Eigen::VectorXd &node2_ea, Eigen::VectorXd &node3_ea, double dt_real, Eigen::VectorXd &Re, Eigen::VectorXd &Re_ea, Eigen::Vector3d &MMe, int mat, double time,  std::vector<double> &c_A, std::vector<double> &c_B, int node1index, int node2index, int node3index){
+void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Vector3d &node3_X, Eigen::Vector3d &node1_x, Eigen::Vector3d &node2_x, Eigen::Vector3d &node3_x, Eigen::VectorXd &node1_ea, Eigen::VectorXd &node2_ea, Eigen::VectorXd &node3_ea, double dt_real, Eigen::VectorXd &Re, Eigen::VectorXd &Re_ea, Eigen::Vector3d &MMe, int mat, double time, std::vector<Vec3d> &a_i , int node1index, int node2index, int node3index){
 
 	// constants and parameters
 	//double mu = 1.0e1; // [mili-Pa] material parameter
@@ -801,42 +803,32 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 	Eigen::Matrix3d Sact;
 	Sact.setZero();
 
-	double S_11 = 0;
-	double S_12 = 0;
-	double S_22 = 0;
+	// averaging a_i at each element based on three nodes
+	double a_11 = (a_i[node1index][0] + a_i[node2index][0] + a_i[node3index][0])/3;
+	double a_12 = (a_i[node1index][1] + a_i[node2index][1] + a_i[node3index][1])/3;
+	double a_22 = (a_i[node1index][2] + a_i[node2index][2] + a_i[node3index][2])/3;
+	
+	Eigen::VectorXd ea_dot = (ea_s_vec - ea_t_vec)/dt_real; // [1/s] strain rate
+
+	// Example of matrix construction
+	//Eigen::Matrix3d ea_t; 
+	// ea_t<<ea_t_vec(0),ea_t_vec(3),ea_t_vec(4),
+	//	  ea_t_vec(3),ea_t_vec(1),ea_t_vec(5),
+	//	  ea_t_vec(4),ea_t_vec(5),ea_t_vec(2);
+
+	double T_max = 850; // [Pa] maximum contraction
+	double eps_dot_0 = 0.003; // [1/s] reference strain rate
+	double kv = 7; // dimensionless reduction in fiber stress upon increasing the shortening rate relative to eps_dot_0
 
 	// only update the contractility based on SF for the cell model 
 	if(mat==1){
-		// active stress calculated by update Stress Fibers function
-		double t_act = 1/3*(c_A[node1index]+c_A[node2index]+c_A[node3index]);
-		// trapezoidal integration
-		for(int i=0;i<N_d;i++){
-			phi = -M_PI/2 + i*dN;
-			// create components of the Sact matrix with traction and trapezoidal integration
-			if(i==0){
-				S_11 = t_act*cos(phi)*cos(phi);
-				S_12 = t_act*sin(2*phi);
-				S_22 = t_act*sin(phi)*sin(phi);
-			}else if(i>=1 && i<N_d-1){
-				S_11 = S_11 + 2*t_act*cos(phi)*cos(phi);
-				S_12 = S_12 + 2*t_act*sin(2*phi);
-				S_22 = S_22 + 2*t_act*sin(phi)*sin(phi);
-			}else if(i==N_d-1){
-				S_11 = S_11 + t_act*cos(phi)*cos(phi);
-				S_12 = S_12 + t_act*sin(2*phi);
-				S_22 = S_22 + t_act*sin(phi)*sin(phi);
-			}
-		}
+		double S_11 = 0.5*T_max*((3*a_11+a_22)/4+0.25*kv*(3*ea_dot(0)+ea_dot(1))/eps_dot_0);
+		double S_22 = 0.5*T_max*((a_11+3*a_22)/4+0.25*kv*(ea_dot(0)+3*ea_dot(1))/eps_dot_0);
+		double S_12 = 0.5*T_max*(a_12/2+0.25*kv*ea_dot(3)/eps_dot_0);
 
-		S_11 = S_11/(2*(N_d-1));
-		S_12 = S_12/(4*(N_d-1));
-		S_22 = S_22/(2*(N_d-1));
-
-		// create Sact matrix based on calculated S_11, S_12, and S_22 stress values
-		Sact << S_11, S_12, 0,
-				S_12, S_22, 0,
-				0,	0,	0;
-		// Sact = t_act*Id; 
+		Sact << S_11,S_12,0,
+		 		S_12,S_22,0,
+		 		0 ,0 ,0;
 	}else if(mat==2){
 		
 		Sact = 0*Id; // no active stress in the substrate
@@ -1393,7 +1385,7 @@ void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real
 }
 
 // Update Stress Fiber Concentration and traction
-void updateSF(std::vector<double> &c_A, std::vector<double> &c_B, double dt_real, std::vector<Eigen::VectorXd> &ea_t, std::vector<Eigen::VectorXd> &ea_temp){
+void updateSF(std::vector<double> &c_A, std::vector<Vec3d> &a_i, double dt_real, std::vector<Eigen::VectorXd> &ea_t, std::vector<Eigen::VectorXd> &ea_temp){
 	
 	// these values are taken for chondrocytes on a rigid substrate: Dowling et al. Acta Biomaterialia. 2013.
 	double C_SF = 1; // dimensionless activation signal - rigid substrate assumption indicates that stress fibers are constantly activated
@@ -1404,43 +1396,75 @@ void updateSF(std::vector<double> &c_A, std::vector<double> &c_B, double dt_real
 	double eps_dot_0 = 0.003; // [1/s] reference strain rate
 	double T_max = 850; // [Pa] maximum contraction
 
-	int N_d = 10; 										// number of segments for trapezoidal integration of stress fibers
-	double dN = M_PI/(N_d-1); 							// segment spacing
-	double phi = -M_PI/2; 								// initialization of first stress fiber angle
-	// double t_act = 1/3*(c_A[node1index]+c_A[node2index]+c_A[node3index]); 	// this will need to be tracked over the simulation per node - assign to c_A[]
-	// double eta = 1/3*(c_B[node1index]+c_B[node2index]+c_B[node3index]); 	// SF concentration, this will need to be tracked over the simulation - assign to c_B[]
+	double t_act_temp = 0; // temporary storage variable for contraction
+
+	Eigen::VectorXd phi(3);
+	phi<< 0, 2*M_PI/3, 4*M_PI/3;
+
+	Eigen::VectorXd t_act(3);
+	t_act<< 0, 0, 0;
+
+	Eigen::VectorXd eta(3);
+	eta<< 0, 0, 0;
+
+	Eigen::VectorXd eta_new(3);
+	eta_new<< 0, 0, 0;
+
+	Eigen::Matrix3d C_e;
+	C_e<< cos(phi(0))*cos(phi(0)), 0, 0,
+		  0, 2*cos(phi(1))*sin(phi(1)),0,
+		  0, 0, sin(phi(2))*sin(phi(2));
+
+	Eigen::VectorXd delta_ai;
+	delta_ai<< 0, 0, 0;
+
+	// Example of matrix construction
+	// Eigen::Matrix3d ea_t; 
+	//    ea_t<<ea_t_vec(0),ea_t_vec(3),ea_t_vec(4),
+	//	  ea_t_vec(3),ea_t_vec(1),ea_t_vec(5),
+	//	  ea_t_vec(4),ea_t_vec(5),ea_t_vec(2);
 
 	int n_node = c_A.size();
 	for(int ni=0;ni<n_node;ni++){
 		
-		Eigen::VectorXd eps_dot = (ea_t[ni] - ea_temp[ni])/dt_real; 	// material strain rate in vector form
+		Eigen::VectorXd ea_dot = (ea_t[ni] - ea_temp[ni])/dt_real; 	// material strain rate in vector form
 		
-		double t_act = c_A[ni];		// stress fiber traction 
-		double eta = c_B[ni];		// stress fiber concentration 
-		double eta_dot = (1-eta)*C_SF*kf/theta_SF-kb/theta_SF*(eta-t_act/T_max); // rate of change of concentration
-		double eps_dot_SF = 0; // initialize the strain rate to be integrated over the fiber directions
-
-		for(int i=0;i<N_d;i++){
-			phi = -M_PI/2 + i*dN;
-			// calculate the strain rate of the stress fibers
-			double eps_dot_SF = eps_dot_SF + eps_dot(0)*cos(phi)*cos(phi)+eps_dot(1)*sin(phi)*sin(phi)+eps_dot(3)*sin(2*phi);
+		for(int i=0;i<3;i++){
+			eta(i) = a_i[ni][0]*cos(phi(i))*cos(phi(i)) + a_i[ni][1]*cos(phi(i))*sin(phi(i)) + a_i[ni][2]*sin(phi(i))*sin(phi(i));
 		}
 
-		// update contractility
-		if(eps_dot_SF/eps_dot_0 <= -eta/kv){
-			t_act = 0;
-		}else if(-eta/kv <= eps_dot_SF/eps_dot_0 && eps_dot_SF/eps_dot_0 <= 0){
-			t_act = eta*T_max*(1+kv/eta*eps_dot_SF/eps_dot_0);
-		}else if(eps_dot_SF/eps_dot_0 > 0){
-			t_act = eta*T_max;
-		}	
+		// calculate tension in each direction based on eta
+		// ea_dot(3) is E_12 
+		for(int i=0;i<3;i++){
+			if(i<2){
+				if(ea_dot(i)/eps_dot_0 <= -eta(i)/kv){
+					t_act_temp = 0;
+				}else if(-eta(i)/kv <= ea_dot(i)/eps_dot_0 && ea_dot(i)/eps_dot_0 <= 0){
+					t_act_temp = T_max*(1+kv/eta(i)*ea_dot(i)/eps_dot_0);
+				}else if(ea_dot(i)/eps_dot_0 > 0){
+					t_act_temp = eta(i)*T_max;
+				}
 
-		// store fiber orientation, theta
-		// dispersion, kappa 
+			}else if(i==2){
+				if(ea_dot(3)/eps_dot_0 <= -eta(2)/kv){
+					t_act_temp = 0;
+				}else if(-eta(2)/kv <= ea_dot(3)/eps_dot_0 && ea_dot(3)/eps_dot_0 <= 0){
+					t_act_temp = T_max*(1+kv/eta(2)*ea_dot(3)/eps_dot_0);
+				}else if(ea_dot(3)/eps_dot_0 > 0){
+					t_act_temp = eta(2)*T_max;
+				}	
+			}
+			
+			t_act(i) = t_act_temp;
+			eta_new(i) = eta(i) + ((1-eta(i))*C_SF*kf/theta_SF-kb/theta_SF*(eta(i)-t_act(i))/T_max)*dt_real; // calculate new eta
+		}
 
-		// reassign new values of contractility and concentration
-		c_A[ni] = t_act;
-		c_B[ni] = eta + dt_real*eta_dot;
+		delta_ai = C_e.inverse()*(eta_new - eta); // equation 15
+
+		for(int i=0;i<3;i++){
+			a_i[ni][i] = a_i[ni][i] + delta_ai(i);
+		}
+		
 	}
 }
 

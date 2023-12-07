@@ -35,7 +35,7 @@ public:
     vertices(),
     triangles(),
     masses(),
-    c_A(), c_B(), c_C(), V_t(),A_t(),ea_t(),fa_u(),
+    c_A(), c_B(), c_C(), V_t(),A_t(),ea_t(),fa_u(),a_i(),
     surf_track_params(),
     driver( NULL ),
     camera_target( UNINITIALIZED_DOUBLE ),
@@ -103,6 +103,8 @@ public:
 
     // NOTE: vector with the reference position of the substrate point connecting to FA
     std::vector<Vec3d> fa_u;
+
+    std::vector<Vec3d> a_i; // Andre's a_i addition
     
 
     // SurfTrack

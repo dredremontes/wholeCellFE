@@ -205,10 +205,11 @@ SurfTrack::SurfTrack( const std::vector<Vec3d>& vs,
                      const std::vector<Vec3d>& A_t,
                      const std::vector<Eigen::VectorXd>& ea_t,
                      const std::vector<Vec3d>& fa_u,
+                     const std::vector<Vec3d>& a_i,
                      const SurfTrackInitializationParameters& initial_parameters ) :
     DynamicSurface(vs, 
                    ts,
-                   masses,c_A,c_B,c_C,V_t,A_t,ea_t,fa_u,
+                   masses,c_A,c_B,c_C,V_t,A_t,ea_t,fa_u,a_i,
                    initial_parameters.m_proximity_epsilon, 
                    initial_parameters.m_friction_coefficient,
                    initial_parameters.m_collision_safety ),
@@ -414,7 +415,7 @@ size_t SurfTrack::add_vertex( const Vec3d& new_vertex_position, double new_verte
     return new_vertex_index;
 }
 
-size_t SurfTrack::add_vertex( const Vec3d& new_vertex_position, double new_vertex_mass, double new_vertex_cA, double new_vertex_cB,double new_vertex_cC, const Vec3d& new_vertex_Vt, const Vec3d& new_vertex_At, const Eigen::VectorXd& new_vertex_eat, const Vec3d& new_vertex_fau)
+size_t SurfTrack::add_vertex( const Vec3d& new_vertex_position, double new_vertex_mass, double new_vertex_cA, double new_vertex_cB,double new_vertex_cC, const Vec3d& new_vertex_Vt, const Vec3d& new_vertex_At, const Eigen::VectorXd& new_vertex_eat, const Vec3d& new_vertex_fau, const Vec3d& new_vertex_ai)
 {
     size_t new_vertex_index = m_mesh.add_vertex( );
     
@@ -448,6 +449,7 @@ size_t SurfTrack::add_vertex( const Vec3d& new_vertex_position, double new_verte
     m_At[new_vertex_index] = new_vertex_At;
     m_eat[new_vertex_index] = new_vertex_eat;
     m_fau[new_vertex_index] = new_vertex_fau;
+    m_ai[new_vertex_index] = new_vertex_ai;
     
     if ( m_collision_safety )
     {
@@ -544,6 +546,9 @@ void SurfTrack::defrag_mesh( )
 
                 // reference FA
                 m_fau[j] = m_fau[i];
+
+                // reference a_i
+                m_ai[j] = m_ai[i];
                 
                 info.m_defragged_vertex_map.push_back( Vec2st(i,j) );
                 
@@ -583,6 +588,7 @@ void SurfTrack::defrag_mesh( )
         m_At.resize(j);
         m_eat.resize(j);
         m_fau.resize(j);
+        m_ai.resize(j);
     }
     
     //

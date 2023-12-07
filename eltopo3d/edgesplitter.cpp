@@ -571,10 +571,10 @@ bool EdgeSplitter::split_edge( size_t edge )
     Vec3d new_vertex_At = 0.5 *(m_surf.m_At[vertex_a]+m_surf.m_At[vertex_b]);
     Eigen::VectorXd new_vertex_eat = 0.5 *(m_surf.m_eat[vertex_a]+m_surf.m_eat[vertex_b]);
     Vec3d new_vertex_fau = 0.5 *(m_surf.m_fau[vertex_a]+m_surf.m_fau[vertex_b]);
-
+    Vec3d new_vertex_ai = 0.5 *(m_surf.m_ai[vertex_a]+m_surf.m_ai[vertex_b]); // Andre's a_i addition
 
     // size_t vertex_e = m_surf.add_vertex( new_vertex_smooth_position, new_vertex_mass );
-    size_t vertex_e = m_surf.add_vertex( new_vertex_smooth_position, new_vertex_mass, new_vertex_cA,new_vertex_cB,new_vertex_cC,new_vertex_Vt,new_vertex_At,new_vertex_eat,new_vertex_fau );
+    size_t vertex_e = m_surf.add_vertex( new_vertex_smooth_position, new_vertex_mass, new_vertex_cA,new_vertex_cB,new_vertex_cC,new_vertex_Vt,new_vertex_At,new_vertex_eat,new_vertex_fau,new_vertex_ai );
 
     
     // Add to change history

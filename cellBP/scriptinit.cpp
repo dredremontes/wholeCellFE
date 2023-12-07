@@ -569,6 +569,7 @@ void ScriptInit::parse_script( const char* filename )
         A_t.clear();
         ea_t.clear();
         fa_u.clear();
+        a_i.clear(); // Andre's a_i addition
         Eigen::VectorXd aux(6); aux.setZero();
         Eigen::Vector3d aux3; aux3.setZero();
         std::cout<<"reading "<<c_B.size()<<" nodes\n";
@@ -577,6 +578,7 @@ void ScriptInit::parse_script( const char* filename )
             A_t.push_back(Vec3d(0.0,0.0,0.0));
             ea_t.push_back(aux);
             fa_u.push_back(Vec3d(0.0,0.0,0.0));
+            a_i.push_back(Vec3d(0.0,0.0,0.0));
         }
 
     }

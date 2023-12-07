@@ -202,7 +202,7 @@ public:
               const std::vector<Vec3st>& ts, 
               const std::vector<double>& masses,
               const SurfTrackInitializationParameters& initial_parameters );
-    
+    // Andre's a_i addition
     SurfTrack( const std::vector<Vec3d>& vs, 
               const std::vector<Vec3st>& ts, 
               const std::vector<double>& masses,
@@ -213,6 +213,7 @@ public:
               const std::vector<Vec3d>& A_t,
               const std::vector<Eigen::VectorXd>& ea_t,
               const std::vector<Vec3d>& fa_u,
+              const std::vector<Vec3d>& a_i, 
               const SurfTrackInitializationParameters& initial_parameters );
     
     ~SurfTrack();
@@ -235,7 +236,7 @@ public:
     void remove_triangle(size_t t);  
     
     size_t add_vertex( const Vec3d& new_vertex_position, double new_vertex_mass );
-    size_t add_vertex( const Vec3d& new_vertex_position, double new_vertex_mass, double new_vertex_cA,double new_vertex_cB,double new_vertex_cC, const Vec3d& new_vertex_Vt, const Vec3d& new_vertex_At, const Eigen::VectorXd& new_vertex_eat, const Vec3d& new_vertex_fau  );
+    size_t add_vertex( const Vec3d& new_vertex_position, double new_vertex_mass, double new_vertex_cA,double new_vertex_cB,double new_vertex_cC, const Vec3d& new_vertex_Vt, const Vec3d& new_vertex_At, const Eigen::VectorXd& new_vertex_eat, const Vec3d& new_vertex_fau, const Vec3d& new_vertex_ai );
     
     void remove_vertex(size_t v);
     
