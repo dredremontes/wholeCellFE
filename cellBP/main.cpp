@@ -335,7 +335,7 @@ namespace {
 
             // use the V_t_hlf to get desired positions 
             for(int ni=0;ni<g_surf_subs->get_num_vertices();ni++){
-                new_positions[ni] = g_surf_subs->get_position(ni)+0*curr_dt*V_t_hlf[ni]; // rigid substrate model
+                new_positions[ni] = g_surf_subs->get_position(ni)+0*curr_dt*V_t_hlf[ni]; // rigid substrate model if there is a 0 in front of curr_dt
                 //std::cout<<"half velocity "<<V_t_hlf[ni]<<"\n";
                 //std::cout<<" new["<<ni<<"]="<<new_positions[ni]<<", from old="<<g_surf->get_position(ni)<<"\n";                
             }
@@ -376,7 +376,7 @@ namespace {
 			
 			// comment below for no_subs model
 			
-            updateForces_Explicit(initial_positions, final_positions, g_surf_subs->get_V_t(), V_t_hlf, g_surf_subs->get_A_t(), g_surf_subs->get_ea_t(), ori_dt, actual_dt, g_surf_subs->m_mesh, sim->m_curr_t, g_surf_cell->get_fa_u(), g_surf_cell->get_a_i(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_positions(),g_surf_cell->m_mesh);
+            // updateForces_Explicit(initial_positions, final_positions, g_surf_subs->get_V_t(), V_t_hlf, g_surf_subs->get_A_t(), g_surf_subs->get_ea_t(), ori_dt, actual_dt, g_surf_subs->m_mesh, sim->m_curr_t, g_surf_cell->get_fa_u(), g_surf_cell->get_a_i(), g_surf_cell->get_cA(),g_surf_cell->get_cB(),g_surf_cell->get_cC(),g_surf_cell->get_positions(),g_surf_cell->m_mesh);
             
             //
             // file output

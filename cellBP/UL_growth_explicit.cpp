@@ -567,18 +567,20 @@ void updateForces_Explicit(const std::vector<Vec3d> &X_t, const std::vector<Vec3
 	std::cout<<"total area "<<area_tot<<"\n";
 	Eigen::VectorXd F_areaConstraint(n_node*3); F_areaConstraint.setZero(); 
 	calculateAreaConstraintForce(F_areaConstraint, X_t, x_t, mesh, area_tot);
-
+	
 	// net force
 	Eigen::VectorXd f_t = F_vd + F_bending + F_AP + F_FA + F_areaConstraint - Res;
 	std::cout<<"net internal force norm "<<Res.norm()<<"\n";
+	
 	// Update the Acceleration for the next time step, and also the strain
 	//double damp = 2.0; // [(kg/s)] not sure this is good or bad? 1 was ok for uniaxial, 0.1 was ok for ZF
 	double damp = 0.01; // pN/um*s  
-	//double rho = 1.0; // [ug/um^3] also not sure if this is good or not
+	//double rho = 1.0; // [ug/um^3] 
 	//double rho = 1000.0; // [kg/m^3] 
 	double rho = 1.0; // [pg/um^3] 
 
 	std::vector<Eigen::VectorXd> ea_temp = ea_t; // array of 6x1 vectors
+	
 
 	// Update acceleration and strain
 	for(int ni=0;ni<n_node;ni++){
@@ -818,9 +820,9 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 
 	double T_max = 850; // [Pa] maximum contraction
 	double eps_dot_0 = 0.003; // [1/s] reference strain rate
-	double kv = 7; // dimensionless reduction in fiber stress upon increasing the shortening rate relative to eps_dot_0
+	double kv = 6; // dimensionless reduction in fiber stress upon increasing the shortening rate relative to eps_dot_0
 
-	// only update the contractility based on SF for the cell model 
+	// only update the contractility based on SF for the cell model, equation 13 
 	if(mat==1){
 		double S_11 = 0.5*T_max*((3*a_11+a_22)/4+0.25*kv*(3*ea_dot(0)+ea_dot(1))/eps_dot_0);
 		double S_22 = 0.5*T_max*((a_11+3*a_22)/4+0.25*kv*(ea_dot(0)+3*ea_dot(1))/eps_dot_0);
@@ -830,7 +832,6 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 		 		S_12,S_22,0,
 		 		0 ,0 ,0;
 	}else if(mat==2){
-		
 		Sact = 0*Id; // no active stress in the substrate
 	}
 
@@ -1388,34 +1389,35 @@ void updateFA(std::vector<double> &c_C, std::vector<Vec3d> &fa_u, double dt_real
 void updateSF(std::vector<double> &c_A, std::vector<Vec3d> &a_i, double dt_real, std::vector<Eigen::VectorXd> &ea_t, std::vector<Eigen::VectorXd> &ea_temp){
 	
 	// these values are taken for chondrocytes on a rigid substrate: Dowling et al. Acta Biomaterialia. 2013.
-	double C_SF = 1; // dimensionless activation signal - rigid substrate assumption indicates that stress fibers are constantly activated
-	double kf = 10; // [1/s] reaction rate of formation
-	double kb = 1; // [1/s] reaction rate of breaking
-	double kv = 7; // dimensionless reduction in fiber stress upon increasing the shortening rate relative to eps_dot_0
-	double theta_SF = 70; // [s] decay constant
+	double C_SF = 1; // dimensionless activation signal - rigid substrate assumption indicates that stress fibers are constantly activated C_SF=1 default
+	double kf = 1; // [1/s] reaction rate of formation, 1 default
+	double kb = 10; // [1/s] reaction rate of breaking, 10 default
+	double kv = 6; // dimensionless reduction in fiber stress upon increasing the shortening rate relative to eps_dot_0
+	double theta_SF = 70; // [s] decay constant, 70 default
 	double eps_dot_0 = 0.003; // [1/s] reference strain rate
-	double T_max = 850; // [Pa] maximum contraction
+	double T_max = 850; // [Pa] maximum contraction, 850 default
 
 	double t_act_temp = 0; // temporary storage variable for contraction
 
 	Eigen::VectorXd phi(3);
-	phi<< 0, 2*M_PI/3, 4*M_PI/3;
+	// phi<< 0, 2*M_PI/3, 4*M_PI/3; // basis directions (Fig 1.) Truong et al. FEA and Design. 2018.
+	phi<< -2*M_PI/3, 0, 2*M_PI/3; // basis directions (Fig 1.) Truong et al. FEA and Design. 2018., the authors use these in the FEniCS code
 
 	Eigen::VectorXd t_act(3);
-	t_act<< 0, 0, 0;
+	t_act<< 0, 0, 0; // equivalent of tension (sigma) in equation (2)
 
 	Eigen::VectorXd eta(3);
-	eta<< 0, 0, 0;
+	eta<< 0, 0, 0; // stress fiber concentration at each basis vector
 
 	Eigen::VectorXd eta_new(3);
-	eta_new<< 0, 0, 0;
+	eta_new<< 0, 0, 0; // stress fiber concentration at next time step
 
-	Eigen::Matrix3d C_e;
-	C_e<< cos(phi(0))*cos(phi(0)), 0, 0,
-		  0, 2*cos(phi(1))*sin(phi(1)),0,
-		  0, 0, sin(phi(2))*sin(phi(2));
+	Eigen::Matrix3d C_e;	// equation (11)
+	C_e<<cos(phi(0))*cos(phi(0)), 0, 0,
+	0, 2*cos(phi(1))*sin(phi(1)),0,
+	0, 0, sin(phi(2))*sin(phi(2));
 
-	Eigen::VectorXd delta_ai;
+	Eigen::VectorXd delta_ai(3); // change in "a" coefficients
 	delta_ai<< 0, 0, 0;
 
 	// Example of matrix construction
@@ -1425,17 +1427,17 @@ void updateSF(std::vector<double> &c_A, std::vector<Vec3d> &a_i, double dt_real,
 	//	  ea_t_vec(4),ea_t_vec(5),ea_t_vec(2);
 
 	int n_node = c_A.size();
+	
 	for(int ni=0;ni<n_node;ni++){
 		
 		Eigen::VectorXd ea_dot = (ea_t[ni] - ea_temp[ni])/dt_real; 	// material strain rate in vector form
 		
-		for(int i=0;i<3;i++){
-			eta(i) = a_i[ni][0]*cos(phi(i))*cos(phi(i)) + a_i[ni][1]*cos(phi(i))*sin(phi(i)) + a_i[ni][2]*sin(phi(i))*sin(phi(i));
-		}
-
 		// calculate tension in each direction based on eta
 		// ea_dot(3) is E_12 
 		for(int i=0;i<3;i++){
+
+			eta(i) = a_i[ni][0]*cos(phi(i))*cos(phi(i)) + 2*a_i[ni][1]*cos(phi(i))*sin(phi(i)) + a_i[ni][2]*sin(phi(i))*sin(phi(i)); // equation 8
+
 			if(i<2){
 				if(ea_dot(i)/eps_dot_0 <= -eta(i)/kv){
 					t_act_temp = 0;
@@ -1462,10 +1464,11 @@ void updateSF(std::vector<double> &c_A, std::vector<Vec3d> &a_i, double dt_real,
 		delta_ai = C_e.inverse()*(eta_new - eta); // equation 15
 
 		for(int i=0;i<3;i++){
-			a_i[ni][i] = a_i[ni][i] + delta_ai(i);
+			a_i[ni][i] = a_i[ni][i] + delta_ai(i); // equation 15
 		}
 		
 	}
+	
 }
 
 void calculatePressureForce(Eigen::VectorXd &F_constraint, const std::vector<Vec3d> &x_t, const Eigen::VectorXd &MM,const NonDestructiveTriMesh &mesh, double t_tot ){
