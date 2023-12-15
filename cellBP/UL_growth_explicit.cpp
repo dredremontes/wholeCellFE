@@ -836,6 +836,7 @@ void evalElementRe(Eigen::Vector3d &node1_X, Eigen::Vector3d &node2_X, Eigen::Ve
 	}
 
 	Eigen::Matrix3d S = Sact + Spas; 
+	// Eigen::Matrix3d S = Spas; 
 
 	// Given the stress fill out the element residual, lets leave the tangent alone
 	Re.setZero();
@@ -1397,68 +1398,64 @@ void updateSF(std::vector<double> &c_A, std::vector<Vec3d> &a_i, double dt_real,
 	double eps_dot_0 = 0.003; // [1/s] reference strain rate
 	double T_max = 850; // [Pa] maximum contraction, 850 default
 
-	double t_act_temp = 0; // temporary storage variable for contraction
+	double t_act = 0; // product of active stress
 
-	Eigen::VectorXd phi(3);
-	// phi<< 0, 2*M_PI/3, 4*M_PI/3; // basis directions (Fig 1.) Truong et al. FEA and Design. 2018.
-	phi<< -2*M_PI/3, 0, 2*M_PI/3; // basis directions (Fig 1.) Truong et al. FEA and Design. 2018., the authors use these in the FEniCS code
+	Eigen::Vector3d phi;
+	phi<< 0, 2*M_PI/3, 4*M_PI/3; // basis directions (Fig 1.) Truong et al. FEA and Design. 2018.
+	// phi<< -2*M_PI/3, 0, 2*M_PI/3; // basis directions (Fig 1.) Truong et al. FEA and Design. 2018., the authors use these in the FEniCS code
 
-	Eigen::VectorXd t_act(3);
-	t_act<< 0, 0, 0; // equivalent of tension (sigma) in equation (2)
-
-	Eigen::VectorXd eta(3);
+	Eigen::Vector3d eta;
 	eta<< 0, 0, 0; // stress fiber concentration at each basis vector
 
-	Eigen::VectorXd eta_new(3);
+	Eigen::Vector3d eta_new;
 	eta_new<< 0, 0, 0; // stress fiber concentration at next time step
 
 	Eigen::Matrix3d C_e;	// equation (11)
-	C_e<<cos(phi(0))*cos(phi(0)), 0, 0,
-	0, 2*cos(phi(1))*sin(phi(1)),0,
-	0, 0, sin(phi(2))*sin(phi(2));
+	C_e<<cos(phi(0))*cos(phi(0)), 2*cos(phi(0))*sin(phi(0)), sin(phi(0))*sin(phi(0)),
+		cos(phi(1))*cos(phi(1)), 2*cos(phi(1))*sin(phi(1)), sin(phi(1))*sin(phi(1)),
+		cos(phi(2))*cos(phi(2)), 2*cos(phi(2))*sin(phi(2)), sin(phi(2))*sin(phi(2));
 
-	Eigen::VectorXd delta_ai(3); // change in "a" coefficients
+	Eigen::Vector3d delta_ai; // change in "a" coefficients
 	delta_ai<< 0, 0, 0;
 
-	// Example of matrix construction
-	// Eigen::Matrix3d ea_t; 
-	//    ea_t<<ea_t_vec(0),ea_t_vec(3),ea_t_vec(4),
-	//	  ea_t_vec(3),ea_t_vec(1),ea_t_vec(5),
-	//	  ea_t_vec(4),ea_t_vec(5),ea_t_vec(2);
-
+	Eigen::Vector3d eps_dot_phi_vec;
+	eps_dot_phi_vec<< 0, 0, 0;
+	
 	int n_node = c_A.size();
 	
 	for(int ni=0;ni<n_node;ni++){
 		
 		Eigen::VectorXd ea_dot = (ea_t[ni] - ea_temp[ni])/dt_real; 	// material strain rate in vector form
-		
+
+		// Example of matrix construction
+		Eigen::Matrix3d ea_dot_mat; 
+			ea_dot_mat<<ea_dot(0),ea_dot(3),ea_dot(4),
+					ea_dot(3),ea_dot(1),ea_dot(5),
+					ea_dot(4),ea_dot(5),ea_dot(2);
+
 		// calculate tension in each direction based on eta
 		// ea_dot(3) is E_12 
 		for(int i=0;i<3;i++){
 
 			eta(i) = a_i[ni][0]*cos(phi(i))*cos(phi(i)) + 2*a_i[ni][1]*cos(phi(i))*sin(phi(i)) + a_i[ni][2]*sin(phi(i))*sin(phi(i)); // equation 8
 
-			if(i<2){
-				if(ea_dot(i)/eps_dot_0 <= -eta(i)/kv){
-					t_act_temp = 0;
-				}else if(-eta(i)/kv <= ea_dot(i)/eps_dot_0 && ea_dot(i)/eps_dot_0 <= 0){
-					t_act_temp = T_max*(1+kv/eta(i)*ea_dot(i)/eps_dot_0);
-				}else if(ea_dot(i)/eps_dot_0 > 0){
-					t_act_temp = eta(i)*T_max;
-				}
+			Eigen::Vector3d unit_vec;unit_vec<<cos(phi(i)), sin(phi(i)), 0; 
 
-			}else if(i==2){
-				if(ea_dot(3)/eps_dot_0 <= -eta(2)/kv){
-					t_act_temp = 0;
-				}else if(-eta(2)/kv <= ea_dot(3)/eps_dot_0 && ea_dot(3)/eps_dot_0 <= 0){
-					t_act_temp = T_max*(1+kv/eta(2)*ea_dot(3)/eps_dot_0);
-				}else if(ea_dot(3)/eps_dot_0 > 0){
-					t_act_temp = eta(2)*T_max;
-				}	
+			// strain in direction phi
+			eps_dot_phi_vec = ea_dot_mat*unit_vec;
+			double eps_dot_phi = eps_dot_phi_vec.dot(unit_vec);
+			
+			
+			if(eps_dot_phi/eps_dot_0 < -eta(i)/kv){
+				t_act = 0;
+			}else if(-eta(i)/kv <= eps_dot_phi/eps_dot_0 && eps_dot_phi/eps_dot_0 <= 0){
+				t_act = T_max*(eta(i)+kv*eps_dot_phi/eps_dot_0);
+			}else if(eps_dot_phi/eps_dot_0 > 0){
+				t_act = eta(i)*T_max;
 			}
 			
-			t_act(i) = t_act_temp;
-			eta_new(i) = eta(i) + ((1-eta(i))*C_SF*kf/theta_SF-kb/theta_SF*(eta(i)-t_act(i))/T_max)*dt_real; // calculate new eta
+			eta_new(i) = eta(i) + ((1-eta(i))*C_SF*kf/theta_SF - kb/theta_SF*(eta(i)-t_act/T_max))*dt_real; // calculate new eta, equation 16
+
 		}
 
 		delta_ai = C_e.inverse()*(eta_new - eta); // equation 15
@@ -1466,6 +1463,7 @@ void updateSF(std::vector<double> &c_A, std::vector<Vec3d> &a_i, double dt_real,
 		for(int i=0;i<3;i++){
 			a_i[ni][i] = a_i[ni][i] + delta_ai(i); // equation 15
 		}
+		
 		
 	}
 	
